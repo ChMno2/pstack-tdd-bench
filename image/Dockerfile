@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git curl ca-certificates util-linux bash \
+    && apt-get install -y --no-install-recommends git curl ca-certificates util-linux procps bash \
     && rm -rf /var/lib/apt/lists/*
 
 # Claude Code CLI, exact version, copied out of root's home so the unprivileged agent user can run it.

@@ -180,3 +180,18 @@ def test_truncated_utf8_output_still_produces_run_json(tmp_path, mini_sut_repo, 
     result = run(spec, BASE_ENV)
     assert result["status"] == "completed"
     assert (spec.run_dir / "run.json").exists()
+
+
+def test_reaping_failure_still_writes_run_json(tmp_path, mini_sut_repo, mini_task, monkeypatch):
+    """Found in the container dry run: a missing pgrep must not cost the run its run.json."""
+    import bench.runner as runner_mod
+
+    def broken(user):
+        raise FileNotFoundError("pgrep")
+
+    monkeypatch.setattr(runner_mod, "_reap_user", broken)
+    spec = _spec(tmp_path, mini_sut_repo, mini_task, "ok")
+    result = run(spec, BASE_ENV)
+    assert (spec.run_dir / "run.json").exists()
+    assert result["leftover_processes"] is None
+    assert "pgrep" in result["error"]

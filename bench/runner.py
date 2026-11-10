@@ -202,7 +202,10 @@ def run(spec: RunSpec, base_env: Mapping[str, str]) -> dict:
         status, error = "harness_error", repr(exc)
     finally:
         watch_log = watcher.stop()
-    leftover = _reap_user(spec.as_user)
+    try:
+        leftover = _reap_user(spec.as_user)
+    except OSError as exc:
+        leftover, error = None, error or f"reaping agent processes failed: {exc!r}"
 
     result = {
         "run_id": run_id,
