@@ -1,12 +1,11 @@
 import json
-import shutil
 from pathlib import Path
 
 import pytest
 
+from bench.capture.trajectory import Event, write_jsonl
 from bench.scoring.score import contaminated, score_run
-from bench.snapshot import build_snapshot
-from bench.trajectory import Event, write_jsonl
+from bench.task.snapshot import build_snapshot
 
 NEW_TEST = "from app.calc import clamp, is_even\n\n\ndef test_is_even():\n    assert is_even(2)\n    assert not is_even(3)\n\n\n" \
            "def test_clamp_top():\n    assert clamp(10, 0, 5) == 5\n"

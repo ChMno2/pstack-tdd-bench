@@ -5,9 +5,8 @@ import yaml
 
 from bench.cli import main
 from bench.task import load_task
-from bench.task_check import check_task
-
-FIXTURES = Path(__file__).parent / "fixtures"
+from bench.task.check import check_task
+from tests.conftest import FIXTURES
 
 
 def _copy(tmp_path: Path) -> Path:

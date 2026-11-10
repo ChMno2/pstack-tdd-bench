@@ -83,7 +83,7 @@ jobs:
       - name: Pinned CLI version
         run: claude --version | grep -q '^2.1.322'
       - name: benchlog plugin importable
-        run: python -c "import bench.testlog.benchlog"
+        run: python -c "import bench.capture.pytest_plugin.benchlog"
       - name: Agent user exists and can run the CLI
         run: runuser -u agent -- claude --version
       - name: LIMS backend tests pass in this image

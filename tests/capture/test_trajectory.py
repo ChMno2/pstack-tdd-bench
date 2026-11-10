@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from bench.trajectory import (
+from bench.capture.trajectory import (
     Event,
     bash_commands,
     convert_stream,
@@ -12,8 +12,9 @@ from bench.trajectory import (
     usage_by_agent,
     write_jsonl,
 )
+from tests.conftest import FIXTURES
 
-STREAM = Path(__file__).parent / "fixtures/stream"
+STREAM = FIXTURES / "stream"
 SUB = "toolu_01NVXnmNBYwevT3HCTYGwBk4"
 
 

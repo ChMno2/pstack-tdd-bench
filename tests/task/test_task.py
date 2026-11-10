@@ -7,8 +7,7 @@ import yaml
 
 from bench.pins import REPO_ROOT
 from bench.task import Task, TaskError, load_task, task_hash
-
-FIXTURES = Path(__file__).parent / "fixtures"
+from tests.conftest import FIXTURES
 
 
 def _copy_task(tmp_path: Path) -> Path:

@@ -46,9 +46,11 @@ def _events_for(raw: dict) -> list[tuple[str, Kind, dict]]:
             elif btype == "thinking":
                 out.append((agent, "text", {"role": "assistant", "thinking": True, "text": block.get("thinking", "")}))
             elif btype == "tool_use":
-                out.append((agent, "tool_call", {"id": block.get("id"), "name": block.get("name"), "input": block.get("input")}))
+                call = {"id": block.get("id"), "name": block.get("name"), "input": block.get("input")}
+                out.append((agent, "tool_call", call))
         if message.get("usage"):
-            out.append((agent, "usage", {"message_id": message.get("id"), "model": message.get("model"), "usage": message["usage"]}))
+            usage = {"message_id": message.get("id"), "model": message.get("model"), "usage": message["usage"]}
+            out.append((agent, "usage", usage))
         return out
     if kind == "user":
         out = []

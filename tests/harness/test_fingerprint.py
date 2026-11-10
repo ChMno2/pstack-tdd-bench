@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from bench.fingerprint import KEYS, collect
+from bench.harness.fingerprint import KEYS, collect
 from bench.task import Task, task_hash
 
 

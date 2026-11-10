@@ -2,7 +2,7 @@ from pathlib import Path
 
 from bench.scoring.redgreen import green_check, red_check, run_nodeids, transplant
 from bench.scoring.testdiff import scoring_env
-from bench.snapshot import build_reference
+from bench.task.snapshot import build_reference
 from tests.scoring.conftest import write
 
 PASS_ON_SNAPSHOT = "from app.calc import add\n\n\ndef test_add_ones():\n    assert add(1, 1) == 2\n"

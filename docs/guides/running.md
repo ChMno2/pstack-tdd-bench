@@ -1,6 +1,6 @@
 # 執行實驗
 
-名詞依 [GLOSSARY.md](../GLOSSARY.md)。
+名詞依 [GLOSSARY.md](../../GLOSSARY.md)。
 
 ## 一次性設定
 

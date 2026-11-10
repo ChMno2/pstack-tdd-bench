@@ -7,13 +7,13 @@ import os
 import sys
 from pathlib import Path
 
-from bench.conditions import CONDITIONS
+from bench.harness.conditions import CONDITIONS
+from bench.harness.runner import RunSpec, run
 from bench.pins import LIMS_COMMIT, REPO_ROOT
-from bench.runner import RunSpec, run
 from bench.scoring.score import score_run
-from bench.snapshot import build_snapshot
 from bench.task import load_task
-from bench.task_check import check_task
+from bench.task.check import check_task
+from bench.task.snapshot import build_snapshot
 
 
 def _common(p: argparse.ArgumentParser) -> None:

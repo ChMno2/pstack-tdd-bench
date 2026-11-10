@@ -1,4 +1,4 @@
-"""pytest plugin `benchlog`, loaded via PYTEST_PLUGINS (see bench.testlog.plugin_env).
+"""pytest plugin `benchlog`, loaded via PYTEST_PLUGINS (see bench.capture.pytest_plugin.plugin_env).
 
 When BENCH_TESTLOG is set, every pytest session appends one JSON line to that file:
 {"ts_start", "ts_end", "args", "cwd", "exitstatus", "results": {nodeid: outcome}, "collect_errors": [...]}.

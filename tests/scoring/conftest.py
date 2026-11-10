@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from bench.snapshot import build_snapshot
+from bench.task.snapshot import build_snapshot
 
 
 @pytest.fixture

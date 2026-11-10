@@ -11,8 +11,8 @@ from pathlib import Path
 
 from bench.scoring.redgreen import FAILING, run_nodeids, transplant
 from bench.scoring.testdiff import PYTEST_ISOLATION, changed_test_files
-from bench.snapshot import build_planted
 from bench.task import Task
+from bench.task.snapshot import build_planted
 
 
 def _tests_on(reference: Path, final: Path, task: Task, dest: Path) -> Path:

@@ -4,7 +4,7 @@ import pytest
 
 from bench.scoring.quality import coverage, mutation, planted
 from bench.scoring.testdiff import scoring_env
-from bench.snapshot import build_reference
+from bench.task.snapshot import build_reference
 from tests.scoring.conftest import write
 
 STRONG = (

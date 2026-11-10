@@ -3,8 +3,7 @@ from pathlib import Path
 
 import pytest
 
-
-from bench.testlog import plugin_env
+from bench.capture.pytest_plugin import plugin_env
 
 
 @pytest.fixture

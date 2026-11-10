@@ -8,14 +8,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from pathlib import Path
 
+from bench.capture.trajectory import Event, bash_commands, read_jsonl
 from bench.pins import LIMS_COMMIT
 from bench.scoring.adherence import adherence, load_testlog
 from bench.scoring.quality import coverage, mutation, planted
 from bench.scoring.redgreen import green_check, red_check
 from bench.scoring.testdiff import diff_tests, scoring_env
-from bench.snapshot import build_reference, build_snapshot
 from bench.task import Task
-from bench.trajectory import Event, bash_commands, read_jsonl
+from bench.task.snapshot import build_reference, build_snapshot
 
 CONTAMINATION_MARKERS = ("github.com/ChuuuDwarf", "githubusercontent.com/ChuuuDwarf",
                          "Cloud-Native-Development-Project", "git clone")
@@ -85,7 +85,8 @@ def score_run(run_dir: Path, task: Task, *, sut_repo: Path, env: Mapping[str, st
                 "unmeasured": not testlog and any("pytest" in c for c in bash_commands(events)),
             },
             "coverage": coverage(reference, final, task, green.valid, senv),
-            "mutation": mutation(reference, final, task, green.valid, len(diff.added), senv, log_dir=run_dir / "scoring"),
+            "mutation": mutation(reference, final, task, green.valid, len(diff.added), senv,
+                                 log_dir=run_dir / "scoring"),
             "planted": planted(reference, final, task, green.valid, senv),
             "contaminated": contaminated(events) or contaminated_transcripts(run_dir / "transcripts"),
             "cost": {key: run.get(key) for key in ("usage_by_agent", "totals", "auto_replies")},

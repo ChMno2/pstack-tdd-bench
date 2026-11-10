@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from bench.conditions import CONDITIONS
-from bench.runner import RunSpec, needs_decision, run
-from bench.snapshot import build_snapshot
+from bench.harness.conditions import CONDITIONS
+from bench.harness.runner import RunSpec, needs_decision, run
 from bench.task import Task
+from bench.task.snapshot import build_snapshot
+from tests.conftest import FIXTURES
 
-FIXTURES = Path(__file__).parent / "fixtures"
 BASE_ENV = {"PATH": os.environ["PATH"], "CLAUDE_CODE_OAUTH_TOKEN": "fake-token"}
 
 
@@ -121,7 +121,7 @@ def test_chown_tree_handles_symlinks_without_root(tmp_path):
     """Regression: shutil.chown(follow_symlinks=...) does not exist on Python 3.12 (found in the CI dry run)."""
     import getpass
 
-    from bench.runner import _chown_tree
+    from bench.harness.runner import _chown_tree
 
     tree = tmp_path / "ws"
     (tree / "pkg").mkdir(parents=True)
@@ -184,7 +184,7 @@ def test_truncated_utf8_output_still_produces_run_json(tmp_path, mini_sut_repo, 
 
 def test_reaping_failure_still_writes_run_json(tmp_path, mini_sut_repo, mini_task, monkeypatch):
     """Found in the container dry run: a missing pgrep must not cost the run its run.json."""
-    import bench.runner as runner_mod
+    import bench.harness.runner as runner_mod
 
     def broken(user):
         raise FileNotFoundError("pgrep")

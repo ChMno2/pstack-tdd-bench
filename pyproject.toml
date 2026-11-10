@@ -20,12 +20,19 @@ bench = "bench.cli:main"
 include = ["bench*"]
 
 [tool.setuptools.package-data]
-bench = ["prompts/*.md"]
+"bench.harness" = ["prompts/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 norecursedirs = ["fixtures"]
 
 [tool.ruff]
-line-length = 110
+line-length = 120
 target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+# test data (fixture source code, expected strings) is clearer on one line
+"tests/**" = ["E501"]

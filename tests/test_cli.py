@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from bench.cli import main
-from tests.test_runner import _fake_claude
+from tests.harness.test_runner import _fake_claude
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

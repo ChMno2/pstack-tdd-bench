@@ -1,6 +1,6 @@
 # 撰寫任務
 
-**任務**是 Agent 要在受測系統上完成的一個 TDD 工作單位，分成修 bug（`bugfix`）和新功能（`feature`）兩類。名詞定義見 [GLOSSARY.md](../GLOSSARY.md)。
+**任務**是 Agent 要在受測系統上完成的一個 TDD 工作單位，分成修 bug（`bugfix`）和新功能（`feature`）兩類。名詞定義見 [GLOSSARY.md](../../GLOSSARY.md)。
 
 ## 目錄格式
 
@@ -16,7 +16,7 @@ tasks/<id>/
 
 ## task.yaml
 
-以冒煙任務 [tasks/T00-smoke/task.yaml](../tasks/T00-smoke/task.yaml) 為例：
+以冒煙任務 [tasks/T00-smoke/task.yaml](../../tasks/T00-smoke/task.yaml) 為例：
 
 ```yaml
 id: T00-smoke
@@ -95,7 +95,7 @@ cd "$REPO" && rm -rf "$T"
 
 ## 驗證
 
-寫完後在本機檢查，需要先照 [README](../README.md#本機開發) 建好開發環境：
+寫完後在本機檢查，需要先照 [README](../../README.md#mode-b-本機開發與測試) 建好開發環境：
 
 ```bash
 bench check-task --task tasks/<id>

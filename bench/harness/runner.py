@@ -14,18 +14,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from bench.conditions import (
-    CREDENTIALS,
-    Condition,
-    build_cli_args,
-    build_env,
-    render_prompt,
-    write_pstack_models,
-)
-from bench.fingerprint import collect
-from bench.pins import AUTO_REPLY, MAX_AUTO_REPLIES
-from bench.task import Task
-from bench.trajectory import (
+from bench.capture.trajectory import (
     Event,
     convert_stream,
     final_text,
@@ -34,7 +23,18 @@ from bench.trajectory import (
     usage_by_agent,
     write_jsonl,
 )
-from bench.watch import ProdWatcher, first_change
+from bench.capture.watch import ProdWatcher, first_change
+from bench.harness.conditions import (
+    CREDENTIALS,
+    Condition,
+    build_cli_args,
+    build_env,
+    render_prompt,
+    write_pstack_models,
+)
+from bench.harness.fingerprint import collect
+from bench.pins import AUTO_REPLY, MAX_AUTO_REPLIES
+from bench.task import Task
 
 
 def needs_decision(text: str) -> bool:

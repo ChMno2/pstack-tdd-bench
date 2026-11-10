@@ -5,8 +5,8 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from bench.snapshot import SnapshotError, build_planted, build_reference, build_snapshot
 from bench.task import Task
+from bench.task.snapshot import SnapshotError, build_planted, build_reference, build_snapshot
 
 
 def _first_line(exc: Exception) -> str:

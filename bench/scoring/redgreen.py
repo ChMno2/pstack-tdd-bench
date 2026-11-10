@@ -11,10 +11,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from bench.capture.pytest_plugin import plugin_env
 from bench.pins import FLAKY_RERUNS
 from bench.scoring.testdiff import changed_test_files
 from bench.task import Task
-from bench.testlog import plugin_env
 
 FAILING = ("failed", "error")
 
@@ -40,7 +40,8 @@ def run_nodeids(tree: Path, task: Task, nodeids: Sequence[str], env: Mapping[str
         log = Path(tmp) / "log.jsonl"
         if files:
             subprocess.run(
-                [sys.executable, "-m", "pytest", *files, "-q", "-p", "no:cacheprovider", "--continue-on-collection-errors"],
+                [sys.executable, "-m", "pytest", *files, "-q",
+                 "-p", "no:cacheprovider", "--continue-on-collection-errors"],
                 cwd=cwd, env={**env, **plugin_env(), "BENCH_TESTLOG": str(log)}, capture_output=True, text=True,
             )
         results: dict[str, str] = {}
@@ -75,7 +76,10 @@ def red_check(snapshot: Path, final: Path, task: Task, added: Sequence[str], env
 def green_check(
     reference: Path, final: Path, task: Task, added: Sequence[str], env: Mapping[str, str], reruns: int = FLAKY_RERUNS
 ) -> GreenResult:
-    """Run the new tests `reruns` times in one transplanted tree: always passed = valid, never = failing, mixed = flaky."""
+    """Run the new tests `reruns` times in one transplanted tree.
+
+    Always passed = valid, never passed = failing, mixed = flaky.
+    """
     if not added:
         return GreenResult([], [], [])
     with tempfile.TemporaryDirectory() as tmp:

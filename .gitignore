@@ -11,3 +11,4 @@ __pycache__/
 runs/
 *.egg-info/
 mutants/
+results/

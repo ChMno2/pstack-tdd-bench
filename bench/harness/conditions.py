@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from bench.capture.pytest_plugin import plugin_env
 from bench.pins import DISALLOWED_TOOLS, MODEL_ID, PSTACK_EFFORT, PSTACK_MODEL, PYTHONHASHSEED, TZ
 from bench.task import Task
-from bench.testlog import plugin_env
 
 PROMPTS = Path(__file__).parent / "prompts"
 CREDENTIALS = ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY")

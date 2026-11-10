@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from bench.watch import ProdWatcher, first_change
+from bench.capture.watch import ProdWatcher, first_change
 
 INCLUDE = ("backend/app/**/*.py",)
 

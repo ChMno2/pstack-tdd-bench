@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from bench.conditions import (
+from bench.harness.conditions import (
     CONDITIONS,
     CredentialError,
     build_cli_args,
