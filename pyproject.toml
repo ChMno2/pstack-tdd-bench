@@ -16,6 +16,9 @@ dev = ["pytest==8.3.3", "pytest-cov==5.0.0", "mutmut==3.8.1", "ruff"]
 [project.scripts]
 bench = "bench.cli:main"
 
+[project.entry-points.pytest11]
+benchlog = "bench.testlog.plugin"
+
 [tool.setuptools.packages.find]
 include = ["bench*"]
 

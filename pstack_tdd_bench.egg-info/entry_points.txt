@@ -1,2 +1,5 @@
 [console_scripts]
 bench = bench.cli:main
+
+[pytest11]
+benchlog = bench.testlog.plugin
