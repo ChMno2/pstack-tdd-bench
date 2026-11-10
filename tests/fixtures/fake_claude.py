@@ -69,7 +69,36 @@ def main(scenario: str, state_dir: str, argv: list[str]) -> None:
         _session("s-1", "Usage limit reached", is_error=True)
     elif scenario == "lims_tdd":
         _lims_tdd()
-        _session("s-1", "Fixed the pagination offset; the new regression tests pass.")
+        _session("s-1", "Fixed the lab-code normaliser; the new regression tests pass.")
+    elif scenario == "leak":
+        import os
+        import subprocess
+        token = os.environ["CLAUDE_CODE_OAUTH_TOKEN"]
+        _emit({"type": "user", "parent_tool_use_id": None, "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": f"CLAUDE_CODE_OAUTH_TOKEN={token}"}]}})
+        Path("backend/leak.txt").write_text(f"token={token}\n")
+        git = ["git", "-c", "user.name=agent", "-c", "user.email=agent@localhost"]
+        subprocess.run([*git, "add", "backend/leak.txt"], check=True)
+        subprocess.run([*git, "commit", "-q", "-m", f"debug {token}"], check=True)
+        print(token, file=sys.stderr)
+        _session("s-1", "Done.")
+    elif scenario == "orphan":
+        import subprocess
+        child = subprocess.Popen(["sleep", "60"])
+        (state / "orphan.pid").write_text(str(child.pid))
+        _session("s-1", "Done.")
+    elif scenario == "transcript":
+        import os
+        projects = Path(os.environ["HOME"]) / ".claude/projects/-work"
+        (projects / "s-1/subagents").mkdir(parents=True, exist_ok=True)
+        (projects / "s-1/subagents/agent-1.jsonl").write_text(json.dumps({"message": {"content": [
+            {"type": "tool_use", "name": "Bash", "input": {"command": "ls"}}]}}) + "\n")
+        _session("s-1", "Done.")
+    elif scenario == "badbytes":
+        sys.stdout.buffer.write(b'{"type": "assistant", "message": {"content": [{"type": "text", "text": "\xe4\xb8')
+        sys.stdout.buffer.write(b"\n")
+        sys.stdout.flush()
+        _session("s-1", "Done.")
     elif scenario == "hang":
         _emit({"type": "system", "subtype": "init", "session_id": "s-1"})
         time.sleep(60)

@@ -8,6 +8,9 @@ LIMS_COMMIT = "227be16e3365e9956da0dec8efa987db3e0f3e4f"
 PSTACK_COMMIT = "c742dd61706fbacc1b95f1a20b7b988cf096ce6c"
 CLAUDE_CODE_VERSION = "2.1.322"
 MODEL_ID = "claude-sonnet-5-5"
+# pstack role value in its Claude Code format `<model> <effort>`; xhigh is pstack's default ("large" budget).
+PSTACK_MODEL = "sonnet"
+PSTACK_EFFORT = "xhigh"
 
 AUTO_REPLY = "請依你的判斷繼續，不要再詢問"
 MAX_AUTO_REPLIES = 3

@@ -14,6 +14,7 @@ from pathlib import Path
 from bench.pins import FLAKY_RERUNS
 from bench.scoring.testdiff import changed_test_files
 from bench.task import Task
+from bench.testlog import plugin_env
 
 FAILING = ("failed", "error")
 
@@ -40,7 +41,7 @@ def run_nodeids(tree: Path, task: Task, nodeids: Sequence[str], env: Mapping[str
         if files:
             subprocess.run(
                 [sys.executable, "-m", "pytest", *files, "-q", "-p", "no:cacheprovider", "--continue-on-collection-errors"],
-                cwd=cwd, env={**env, "BENCH_TESTLOG": str(log)}, capture_output=True, text=True,
+                cwd=cwd, env={**env, **plugin_env(), "BENCH_TESTLOG": str(log)}, capture_output=True, text=True,
             )
         results: dict[str, str] = {}
         if log.exists():

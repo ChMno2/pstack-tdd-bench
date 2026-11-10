@@ -66,8 +66,8 @@ def test_testless_run(tmp_path, mini_sut_repo, mini_task, env):
     score = _score(rd, mini_sut_repo, mini_task, env)
     assert score["testless"] is True
     assert score["red"]["red"] is False
-    assert score["mutation"] == {"killed": 0, "total": 0, "score": 0.0, "per_test": 0.0}
-    assert score["adherence"] == {"followed": False, "sessions": 0, "evidence": None}
+    assert score["mutation"] == {"ok": True, "error": None, "killed": 0, "total": 0, "score": 0.0, "per_test": 0.0}
+    assert score["adherence"] == {"followed": False, "sessions": 0, "evidence": None, "unmeasured": False}
 
 
 def test_score_runs_for_failed_run(tmp_path, mini_sut_repo, mini_task, env):
@@ -100,3 +100,26 @@ def test_score_ignores_completion_claim(run_dir, mini_sut_repo, mini_task, env):
     run["completion_claim"] = "I wrote 50 excellent tests and everything passes."
     (run_dir / "run.json").write_text(json.dumps(run))
     assert _score(run_dir, mini_sut_repo, mini_task, env) == before
+
+
+def test_pytest_without_testlog_is_flagged_unmeasured(run_dir, mini_sut_repo, mini_task, env):
+    """Review Important 4: the agent ran pytest but nothing was logged -> adherence cannot be judged."""
+    (run_dir / "testlog.jsonl").write_text("")
+    score = _score(run_dir, mini_sut_repo, mini_task, env)
+    assert score["adherence"]["followed"] is False
+    assert score["adherence"]["unmeasured"] is True
+
+
+def test_contamination_found_in_subagent_transcripts(tmp_path):
+    """Review Important 7: subagent tool calls live in the copied transcripts, not only in the stream."""
+    from bench.scoring.score import contaminated_transcripts
+
+    t = tmp_path / "transcripts/-work/s-1/subagents"
+    t.mkdir(parents=True)
+    (t / "agent-1.jsonl").write_text(json.dumps({"message": {"content": [{"type": "tool_use", "name": "Bash",
+        "input": {"command": "git clone https://github.com/ChuuuDwarf/Cloud-Native-Development-Project"}}]}}) + "\n")
+    assert contaminated_transcripts(tmp_path / "transcripts") is True
+    (t / "agent-1.jsonl").write_text(json.dumps({"message": {"content": [
+        {"type": "text", "text": "see github.com/ChuuuDwarf/Cloud-Native-Development-Project"}]}}) + "\n")
+    assert contaminated_transcripts(tmp_path / "transcripts") is False
+    assert contaminated_transcripts(tmp_path / "missing") is False

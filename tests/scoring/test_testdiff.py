@@ -64,3 +64,13 @@ def test_scoring_env_pins_and_strips(env):
     out = scoring_env({**env, "BENCH_TESTLOG": "/tmp/x", "TZ": "Asia/Taipei"})
     assert "BENCH_TESTLOG" not in out
     assert out["TZ"] == "UTC" and out["PYTHONHASHSEED"] == "0"
+
+
+def test_changed_test_files_includes_support_files(trees, mini_task):
+    """Review Important 3: helper modules and data under the test tree travel with the tests."""
+    snapshot, final = trees
+    write(final, "backend/tests/helpers.py", "def two():\n    return 2\n")
+    write(final, "backend/tests/data/case.json", "{}\n")
+    write(final, "backend/tests/__pycache__/x.cpython-312.pyc", "junk")
+    assert changed_test_files(snapshot, final, mini_task) == [
+        Path("backend/tests/data/case.json"), Path("backend/tests/helpers.py")]

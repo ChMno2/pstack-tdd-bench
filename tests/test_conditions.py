@@ -84,16 +84,20 @@ def test_env_drops_unlisted_vars_and_pins(tmp_path: Path):
     assert env["CLAUDE_CODE_SUBAGENT_MODEL_FORCE"] == "1"
     assert env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] == "claude-sonnet-5-5"
     assert env["TZ"] == "UTC" and env["PYTHONHASHSEED"] == "0"
+    assert env["PYTEST_PLUGINS"] == "benchlog"
+    assert (Path(env["PYTHONPATH"]) / "benchlog.py").is_file()
 
 
 def test_pstack_models_all_roles_same_model(tmp_path: Path):
-    path = write_pstack_models(tmp_path, "claude-sonnet-5-5")
+    """Review Important 8: pstack's Claude Code adapter expects `<model> <effort>` values (e.g. `opus xhigh`)."""
+    path = write_pstack_models(tmp_path)
     assert path == tmp_path / ".claude/rules/pstack-models.md"
     text = path.read_text()
     assert not text.startswith("---")
+    assert "# budget: large (xhigh)" in text
     role_lines = [line for line in text.splitlines() if line and not line.startswith("#")]
     assert len(role_lines) == 17
     for line in role_lines:
         _, value = line.split(": ", 1)
-        assert {v.strip() for v in value.split(",")} == {"claude-sonnet-5-5"}
-    assert "arena runners: claude-sonnet-5-5, claude-sonnet-5-5" in text
+        assert {v.strip() for v in value.split(",")} == {"sonnet xhigh"}
+    assert "arena runners: sonnet xhigh, sonnet xhigh" in text

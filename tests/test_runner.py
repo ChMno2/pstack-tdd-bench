@@ -130,3 +130,53 @@ def test_chown_tree_handles_symlinks_without_root(tmp_path):
     (tree / "dangling.py").symlink_to("missing.py")
     _chown_tree(tree, getpass.getuser())
     assert (tree / "pkg/a.py").stat().st_uid == os.getuid()
+
+
+def _all_bytes(root):
+    for path in root.rglob("*"):
+        if path.is_file() and not path.is_symlink():
+            yield path, path.read_bytes()
+
+
+def test_credentials_are_redacted_everywhere_in_the_run_dir(tmp_path, mini_sut_repo, mini_task):
+    """Review Critical 1: artifacts are public, so no credential may survive in raw output, logs or workspace."""
+    spec = _spec(tmp_path, mini_sut_repo, mini_task, "leak")
+    result = run(spec, BASE_ENV)
+    assert result["status"] == "completed"
+    leaks = [str(p) for p, data in _all_bytes(spec.run_dir) if b"fake-token" in data]
+    assert leaks == []
+    assert not (spec.run_dir / "workspace/.git").exists()
+    history = (spec.run_dir / "workspace-git.patch").read_text()
+    assert "debug [REDACTED]" in history and "leak.txt" in history
+    assert (spec.run_dir / "workspace/backend/leak.txt").read_text() == "token=[REDACTED]\n"
+
+
+def test_processes_left_by_the_agent_are_killed(tmp_path, mini_sut_repo, mini_task):
+    """Review Important 6: nothing the agent started may keep running into scoring."""
+    result = run(_spec(tmp_path, mini_sut_repo, mini_task, "orphan"), BASE_ENV)
+    pid = int((tmp_path / "state/orphan.pid").read_text())
+    deadline = time.time() + 5
+    alive = True
+    while alive and time.time() < deadline:
+        try:
+            os.kill(pid, 0)
+            time.sleep(0.1)
+        except ProcessLookupError:
+            alive = False
+    assert not alive
+    assert result["leftover_processes"] is None  # only counted when running as a separate user
+
+
+def test_claude_transcripts_are_copied(tmp_path, mini_sut_repo, mini_task):
+    """Review Important 7: subagent transcripts must reach the run dir for traceability and contamination checks."""
+    spec = _spec(tmp_path, mini_sut_repo, mini_task, "transcript")
+    run(spec, BASE_ENV)
+    assert (spec.run_dir / "transcripts/-work/s-1/subagents/agent-1.jsonl").exists()
+
+
+def test_truncated_utf8_output_still_produces_run_json(tmp_path, mini_sut_repo, mini_task):
+    """A SIGKILL can cut a multi-byte character; the run must still be recorded and scored."""
+    spec = _spec(tmp_path, mini_sut_repo, mini_task, "badbytes")
+    result = run(spec, BASE_ENV)
+    assert result["status"] == "completed"
+    assert (spec.run_dir / "run.json").exists()

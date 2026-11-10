@@ -21,7 +21,7 @@ bench/scoring/redgreen.py
 bench/scoring/score.py
 bench/scoring/testdiff.py
 bench/testlog/__init__.py
-bench/testlog/plugin.py
+bench/testlog/benchlog.py
 pstack_tdd_bench.egg-info/PKG-INFO
 pstack_tdd_bench.egg-info/SOURCES.txt
 pstack_tdd_bench.egg-info/dependency_links.txt

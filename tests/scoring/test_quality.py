@@ -40,9 +40,9 @@ def test_coverage_counts_only_task_modules(trees, reference, mini_task, env):
 
 def test_empty_valid_gives_zero(trees, reference, mini_task, env):
     _, final = trees
-    assert coverage(reference, final, mini_task, [], scoring_env(env)) == {"line": 0.0, "branch": 0.0}
+    assert coverage(reference, final, mini_task, [], scoring_env(env)) == {"ok": True, "line": 0.0, "branch": 0.0}
     assert mutation(reference, final, mini_task, [], 0, scoring_env(env)) == {
-        "killed": 0, "total": 0, "score": 0.0, "per_test": 0.0}
+        "ok": True, "error": None, "killed": 0, "total": 0, "score": 0.0, "per_test": 0.0}
     assert planted(reference, final, mini_task, [], scoring_env(env)) == {"off_by_one": False}
 
 
@@ -83,3 +83,28 @@ def test_mutation_writes_logs_when_asked(trees, reference, mini_task, env, tmp_p
     text = (logs / "mutmut.log").read_text()
     assert "[mutmut run --max-children 1]" in text and "[mutmut results --all true]" in text
     assert "[setup.cfg]" in text and "only_mutate" in text
+
+
+def test_percent_in_node_id_does_not_break_mutmut(trees, reference, mini_task, env):
+    """Review Important 5: mutmut reads setup.cfg with ConfigParser interpolation, so '%' must be escaped."""
+    _, final = trees
+    write(final, "backend/tests/test_new.py",
+          "import pytest\nfrom app.calc import is_even\n\n\n@pytest.mark.parametrize('n', [2, 4], ids=['50%', '100%'])\n"
+          "def test_even(n):\n    assert is_even(n)\n    assert not is_even(n + 1)\n")
+    ids = ["tests/test_new.py::test_even[50%]", "tests/test_new.py::test_even[100%]"]
+    result = mutation(reference, final, mini_task, ids, 2, scoring_env(env))
+    assert result["ok"] is True and result["killed"] > 0
+
+
+def test_tool_failure_is_visible(trees, reference, mini_task, env):
+    """Review Important 5: a crashed tool must not look like a measured zero."""
+    from bench.task import Task
+
+    _, final = trees
+    write(final, "backend/tests/test_new.py", STRONG)
+    broken = Task(**{**mini_task.__dict__, "modules": ("nope/missing.py",)})
+    result = mutation(reference, final, broken, STRONG_IDS, 3, scoring_env(env))
+    assert result["ok"] is False and result["error"]
+    assert result["killed"] is None and result["score"] is None
+    cov = coverage(reference, final, mini_task, ["tests/test_new.py::test_does_not_exist"], scoring_env(env))
+    assert cov == {"ok": False, "line": None, "branch": None}

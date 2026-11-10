@@ -15,7 +15,7 @@ from bench.scoring.redgreen import green_check, red_check
 from bench.scoring.testdiff import diff_tests, scoring_env
 from bench.snapshot import build_reference, build_snapshot
 from bench.task import Task
-from bench.trajectory import Event, read_jsonl
+from bench.trajectory import Event, bash_commands, read_jsonl
 
 CONTAMINATION_MARKERS = ("github.com/ChuuuDwarf", "githubusercontent.com/ChuuuDwarf",
                          "Cloud-Native-Development-Project", "git clone")
@@ -28,6 +28,33 @@ def contaminated(events: Sequence[Event]) -> bool:
             blob = json.dumps(e.data.get("input"), ensure_ascii=False)
             if any(marker in blob for marker in CONTAMINATION_MARKERS):
                 return True
+    return False
+
+
+def _tool_use_inputs(obj) -> list:
+    if isinstance(obj, dict):
+        found = [obj.get("input")] if obj.get("type") == "tool_use" else []
+        return found + [x for v in obj.values() for x in _tool_use_inputs(v)]
+    if isinstance(obj, list):
+        return [x for v in obj for x in _tool_use_inputs(v)]
+    return []
+
+
+def contaminated_transcripts(root: Path) -> bool:
+    """Same check over Claude Code's own transcripts, which also hold subagents' tool calls."""
+    root = Path(root)
+    if not root.is_dir():
+        return False
+    for path in sorted(root.rglob("*.jsonl")):
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            for tool_input in _tool_use_inputs(obj):
+                blob = json.dumps(tool_input, ensure_ascii=False)
+                if any(marker in blob for marker in CONTAMINATION_MARKERS):
+                    return True
     return False
 
 
@@ -52,11 +79,15 @@ def score_run(run_dir: Path, task: Task, *, sut_repo: Path, env: Mapping[str, st
             "tests": asdict(diff),
             "red": asdict(red),
             "green": asdict(green),
-            "adherence": asdict(adherence(testlog, set(diff.added), run.get("first_prod_change"))),
+            "adherence": {
+                **asdict(adherence(testlog, set(diff.added), run.get("first_prod_change"))),
+                # the agent ran pytest but nothing was logged (e.g. a pytest that did not load benchlog)
+                "unmeasured": not testlog and any("pytest" in c for c in bash_commands(events)),
+            },
             "coverage": coverage(reference, final, task, green.valid, senv),
             "mutation": mutation(reference, final, task, green.valid, len(diff.added), senv, log_dir=run_dir / "scoring"),
             "planted": planted(reference, final, task, green.valid, senv),
-            "contaminated": contaminated(events),
+            "contaminated": contaminated(events) or contaminated_transcripts(run_dir / "transcripts"),
             "cost": {key: run.get(key) for key in ("usage_by_agent", "totals", "auto_replies")},
         }
     (run_dir / "score.json").write_text(json.dumps(score, indent=2, ensure_ascii=False, sort_keys=True) + "\n",

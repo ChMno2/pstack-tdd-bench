@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from bench.pins import DISALLOWED_TOOLS, MODEL_ID, PYTHONHASHSEED, TZ
+from bench.pins import DISALLOWED_TOOLS, MODEL_ID, PSTACK_EFFORT, PSTACK_MODEL, PYTHONHASHSEED, TZ
 from bench.task import Task
+from bench.testlog import plugin_env
 
 PROMPTS = Path(__file__).parent / "prompts"
 CREDENTIALS = ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY")
@@ -84,18 +85,21 @@ def build_env(base: Mapping[str, str], *, home: Path) -> dict[str, str]:
         "CLAUDE_CODE_SUBAGENT_MODEL": MODEL_ID,
         "CLAUDE_CODE_SUBAGENT_MODEL_FORCE": "1",
         "ANTHROPIC_DEFAULT_HAIKU_MODEL": MODEL_ID,
+        **plugin_env(),
     })
     return env
 
 
-def write_pstack_models(home: Path, model: str) -> Path:
+def write_pstack_models(home: Path, model: str = PSTACK_MODEL, effort: str = PSTACK_EFFORT) -> Path:
+    """Single-model pstack rule in the format pstack's Claude Code adapter specifies: `<model> <effort>` per entry."""
     path = Path(home) / ".claude/rules/pstack-models.md"
     path.parent.mkdir(parents=True, exist_ok=True)
+    value = f"{model} {effort}"
     lines = [
         "# pstack model configuration. One line per role. Delete a line to fall back to the skill default.",
         "# Written by pstack-tdd-bench for the single-model condition: every role runs on the same model.",
-        "# budget: default",
+        f"# budget: large ({effort})",
     ]
-    lines += [f"{role}: {', '.join([model] * count)}" for role, count in PSTACK_ROLES.items()]
+    lines += [f"{role}: {', '.join([value] * count)}" for role, count in PSTACK_ROLES.items()]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path

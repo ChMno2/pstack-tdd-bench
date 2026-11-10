@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import pwd
+import shutil
+import signal
 import subprocess
 import time
 from collections.abc import Mapping
@@ -12,9 +14,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from bench.conditions import Condition, build_cli_args, build_env, render_prompt, write_pstack_models
+from bench.conditions import (
+    CREDENTIALS,
+    Condition,
+    build_cli_args,
+    build_env,
+    render_prompt,
+    write_pstack_models,
+)
 from bench.fingerprint import collect
-from bench.pins import AUTO_REPLY, MAX_AUTO_REPLIES, MODEL_ID
+from bench.pins import AUTO_REPLY, MAX_AUTO_REPLIES
 from bench.task import Task
 from bench.trajectory import (
     Event,
@@ -69,11 +78,71 @@ def _prepare(spec: RunSpec, testlog: Path) -> None:
     spec.home.mkdir(parents=True, exist_ok=True)
     testlog.touch()
     if spec.condition.use_pstack:
-        write_pstack_models(spec.home, MODEL_ID)
+        write_pstack_models(spec.home)
     if spec.as_user:
         _chown_tree(spec.workspace, spec.as_user)
         _chown_tree(spec.home, spec.as_user)
         os.chown(testlog, *_owner(spec.as_user))
+
+
+REDACTED = b"[REDACTED]"
+
+
+def _kill_group(pid: int) -> None:
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def _reap_user(user: str | None) -> int | None:
+    """Kill everything still running as the agent user; return how many processes were left behind."""
+    if not user:
+        return None
+    found = subprocess.run(["pgrep", "-u", user], capture_output=True, text=True, check=False).stdout.split()
+    subprocess.run(["pkill", "-KILL", "-u", user], capture_output=True, check=False)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if not subprocess.run(["pgrep", "-u", user], capture_output=True, check=False).stdout.strip():
+            break
+        time.sleep(0.2)
+    return len(found)
+
+
+def _export_workspace_git(spec: RunSpec) -> None:
+    """Keep the agent's commits as a text patch (redactable), then drop .git: compressed objects cannot be redacted."""
+    git_dir = spec.workspace / ".git"
+    if not git_dir.exists():
+        return
+    log = subprocess.run(
+        ["git", "-c", "safe.directory=*", "-C", str(spec.workspace), "log", "-p", "--all", "--format=fuller"],
+        capture_output=True, check=False,
+    ).stdout
+    (spec.run_dir / "workspace-git.patch").write_bytes(log)
+    shutil.rmtree(git_dir)
+
+
+def _redact(root: Path, secrets: list[str]) -> None:
+    needles = [s.encode() for s in secrets]
+    for path in root.rglob("*"):
+        if not path.is_file() or path.is_symlink():
+            continue
+        data = path.read_bytes()
+        if any(n in data for n in needles):
+            for n in needles:
+                data = data.replace(n, REDACTED)
+            path.write_bytes(data)
+
+
+def _finalize(spec: RunSpec, testlog: Path, secrets: list[str]) -> None:
+    transcripts = spec.home / ".claude" / "projects"
+    if transcripts.is_dir():
+        shutil.copytree(transcripts, spec.run_dir / "transcripts", dirs_exist_ok=True, symlinks=True)
+    _export_workspace_git(spec)
+    _redact(spec.run_dir, secrets)
+    if spec.as_user:
+        os.chown(testlog, 0, 0)
+        testlog.chmod(0o644)
 
 
 def run(spec: RunSpec, base_env: Mapping[str, str]) -> dict:
@@ -83,12 +152,14 @@ def run(spec: RunSpec, base_env: Mapping[str, str]) -> dict:
     testlog = spec.run_dir / "testlog.jsonl"
     _prepare(spec, testlog)
     env = build_env({**base_env, "BENCH_TESTLOG": str(testlog)}, home=spec.home)
+    secrets = [env[name] for name in CREDENTIALS if len(env.get(name, "")) >= 8]
     fingerprint = collect(spec.task, claude_bin=spec.claude_bin, env=base_env)
 
     events: list[Event] = []
     exit_codes: list[int] = []
     auto_replies = 0
     status = "completed"
+    error: str | None = None
     message = render_prompt(spec.condition, spec.task)
     resume: str | None = None
 
@@ -102,16 +173,17 @@ def run(spec: RunSpec, base_env: Mapping[str, str]) -> dict:
                 args = ["runuser", "-u", spec.as_user, "--", *args]
             raw = spec.run_dir / "raw" / f"session-{n}.jsonl"
             remaining = spec.timeout_s - (time.monotonic() - started)
-            with open(raw, "w", encoding="utf-8") as out, open(raw.with_suffix(".stderr"), "w") as err:
+            with open(raw, "wb") as out, open(raw.with_suffix(".stderr"), "wb") as err:
                 proc = subprocess.Popen(args, cwd=spec.workspace, env=env, stdin=subprocess.DEVNULL,
                                         stdout=out, stderr=err, start_new_session=True)
                 try:
                     code = proc.wait(timeout=max(remaining, 0.1))
                 except subprocess.TimeoutExpired:
-                    os.killpg(proc.pid, 9)
-                    proc.wait()
                     code = None
-            session_events = convert_stream(raw.read_text(encoding="utf-8").splitlines(), n, len(events))
+                _kill_group(proc.pid)  # also after a normal exit: background children must not outlive the session
+                proc.wait()
+            lines = raw.read_text(encoding="utf-8", errors="replace").splitlines()
+            session_events = convert_stream(lines, n, len(events))
             events += session_events
             if code is None:
                 status = "timeout"
@@ -126,8 +198,11 @@ def run(spec: RunSpec, base_env: Mapping[str, str]) -> dict:
             auto_replies += 1
             message = AUTO_REPLY
             events.append(Event(len(events), n + 1, "main", "auto_reply", {"text": AUTO_REPLY}))
+    except Exception as exc:  # the agent may already have run: record what we have instead of losing the run
+        status, error = "harness_error", repr(exc)
     finally:
         watch_log = watcher.stop()
+    leftover = _reap_user(spec.as_user)
 
     result = {
         "run_id": run_id,
@@ -135,8 +210,10 @@ def run(spec: RunSpec, base_env: Mapping[str, str]) -> dict:
         "condition": spec.condition.id,
         "rep": spec.rep,
         "status": status,
+        "error": error,
         "exit_codes": exit_codes,
         "auto_replies": auto_replies,
+        "leftover_processes": leftover,
         "completion_claim": final_text(events),
         "usage_by_agent": usage_by_agent(events),
         "totals": totals(events),
@@ -148,4 +225,5 @@ def run(spec: RunSpec, base_env: Mapping[str, str]) -> dict:
     write_jsonl(events, spec.run_dir / "trajectory.jsonl")
     (spec.run_dir / "watch.json").write_text(json.dumps(watch_log, indent=2, sort_keys=True))
     (spec.run_dir / "run.json").write_text(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
-    return result
+    _finalize(spec, testlog, secrets)
+    return json.loads((spec.run_dir / "run.json").read_text())

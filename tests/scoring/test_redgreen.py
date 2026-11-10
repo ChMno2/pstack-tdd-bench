@@ -79,3 +79,17 @@ def test_flaky_test_detected(trees, mini_task, env, tmp_path: Path):
     result = green_check(reference, final, mini_task, ["tests/test_flaky.py::test_flaky"], scoring_env(env))
     assert result.flaky == ["tests/test_flaky.py::test_flaky"]
     assert result.valid == [] and result.failing == []
+
+
+HELPER_TEST = "from app.calc import is_even\nfrom tests.helpers import two\n\n\ndef test_two_is_even():\n    assert is_even(two())\n"
+
+
+def test_tests_using_a_new_helper_module_score_normally(trees, mini_task, env, tmp_path: Path):
+    """Review Important 3: a valid test that imports a new helper must not become a false red / failing test."""
+    snapshot, final = trees
+    reference = build_reference(snapshot, mini_task, tmp_path / "reference")
+    write(final, "backend/tests/helpers.py", "def two():\n    return 2\n")
+    write(final, "backend/tests/test_helper.py", HELPER_TEST)
+    ids = ["tests/test_helper.py::test_two_is_even"]
+    assert red_check(snapshot, final, mini_task, ids, scoring_env(env)).outcomes == {ids[0]: "failed"}
+    assert green_check(reference, final, mini_task, ids, scoring_env(env)).valid == ids

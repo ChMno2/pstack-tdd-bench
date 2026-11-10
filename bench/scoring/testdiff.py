@@ -19,7 +19,7 @@ PYTEST_ISOLATION = ("-p", "no:benchlog", "-p", "no:cacheprovider")
 
 
 def scoring_env(base: Mapping[str, str]) -> dict[str, str]:
-    env = {k: v for k, v in base.items() if k != "BENCH_TESTLOG"}
+    env = {k: v for k, v in base.items() if k not in ("BENCH_TESTLOG", "PYTEST_PLUGINS")}
     env["TZ"] = TZ
     env["PYTHONHASHSEED"] = PYTHONHASHSEED
     return env
@@ -70,16 +70,24 @@ def diff_tests(snapshot: Path, final: Path, task: Task, env: Mapping[str, str]) 
     return TestDiff(added=sorted(after - before), removed=sorted(before - after), modified=modified)
 
 
-def _is_test_file(path: Path) -> bool:
-    return any(fnmatch.fnmatch(path.name, pattern) for pattern in TEST_FILE_PATTERNS)
+SUPPORT_DIR_PATTERNS = ("**/tests/**", "**/test/**")
+SKIP_PARTS = {".git", "__pycache__", ".pytest_cache", "mutants"}
+
+
+def _is_test_support(rel: Path) -> bool:
+    """Test files plus everything under a tests/ directory (helpers, factories, __init__, data files)."""
+    if any(fnmatch.fnmatch(rel.name, pattern) for pattern in TEST_FILE_PATTERNS):
+        return True
+    return any(fnmatch.fnmatch("/" + rel.as_posix(), pattern) for pattern in SUPPORT_DIR_PATTERNS)
 
 
 def changed_test_files(snapshot: Path, final: Path, task: Task) -> list[Path]:
+    """Added or changed test-support files (relative to the tree root) that scoring must carry onto other trees."""
     snapshot, final = Path(snapshot), Path(final)
     changed = []
-    for path in (final / task.workdir).rglob("*.py"):
+    for path in (final / task.workdir).rglob("*"):
         rel = path.relative_to(final)
-        if ".git" in rel.parts or not _is_test_file(path):
+        if not path.is_file() or SKIP_PARTS & set(rel.parts) or path.suffix == ".pyc" or not _is_test_support(rel):
             continue
         original = snapshot / rel
         if not original.exists() or original.read_bytes() != path.read_bytes():

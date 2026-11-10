@@ -4,10 +4,15 @@ from pathlib import Path
 import pytest
 
 
+from bench.testlog import plugin_env
+
+
 @pytest.fixture
 def log_path(pytester, monkeypatch) -> Path:
     path = pytester.path / "testlog.jsonl"
     monkeypatch.setenv("BENCH_TESTLOG", str(path))
+    for key, value in plugin_env().items():
+        monkeypatch.setenv(key, value)
     return path
 
 
@@ -57,3 +62,19 @@ def test_two_sessions_append_two_lines(pytester, log_path):
     pytester.runpytest_subprocess()
     pytester.runpytest_subprocess()
     assert len(_lines(log_path)) == 2
+
+
+def test_not_autoloaded_without_pytest_plugins(pytester, monkeypatch):
+    """Review Important 4: loading must come from PYTEST_PLUGINS only (works in any venv, never double-logs)."""
+    path = pytester.path / "testlog.jsonl"
+    monkeypatch.setenv("BENCH_TESTLOG", str(path))
+    monkeypatch.delenv("PYTEST_PLUGINS", raising=False)
+    pytester.makepyfile(test_w="def test_ok():\n    assert True\n")
+    pytester.runpytest_subprocess()
+    assert not path.exists()
+
+
+def test_plugin_dir_holds_a_standalone_module():
+    env = plugin_env()
+    assert env["PYTEST_PLUGINS"] == "benchlog"
+    assert (Path(env["PYTHONPATH"]) / "benchlog.py").is_file()

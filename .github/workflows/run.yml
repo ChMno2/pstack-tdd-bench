@@ -37,6 +37,8 @@ jobs:
       reps: ${{ steps.r.outputs.reps }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - id: r
         run: |
           image="$(head -n 1 image/IMAGE_DIGEST)"
@@ -86,10 +88,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          persist-credentials: false
       - name: Lock tasks (references, planted bugs) and the SUT's git history away from the agent
         run: |
-          chown -R root:root "$GITHUB_WORKSPACE/tasks" "$GITHUB_WORKSPACE/sut"
-          chmod 700 "$GITHUB_WORKSPACE/tasks" "$GITHUB_WORKSPACE/sut"
+          chown -R root:root "$GITHUB_WORKSPACE/tasks" "$GITHUB_WORKSPACE/sut" "$GITHUB_WORKSPACE/.git"
+          chmod 700 "$GITHUB_WORKSPACE/tasks" "$GITHUB_WORKSPACE/sut" "$GITHUB_WORKSPACE/.git"
       - name: Run the agent
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.auth == 'subscription' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
@@ -99,14 +102,16 @@ jobs:
           bench run --task "${{ inputs.task }}" --condition "${{ inputs.condition }}" --rep "${{ matrix.rep }}" \
             --out /bench-runs --sut-repo "$GITHUB_WORKSPACE/sut/lims" \
             --plugin-dir /opt/pstack --home /home/agent --as-user agent
-      - name: The agent cannot read the reference implementation
+      - name: The agent cannot read references or SUT history, and left nothing running
         run: |
-          if runuser -u agent -- cat "$GITHUB_WORKSPACE/${{ inputs.task }}/reference.patch" > /dev/null 2>&1; then
-            echo "agent can read the reference patch"; exit 1
-          fi
-          if runuser -u agent -- git -C "$GITHUB_WORKSPACE/sut/lims" log -1 > /dev/null 2>&1; then
-            echo "agent can read the SUT's git history"; exit 1
-          fi
+          # test -r fails only for lack of permission (the paths are checked to exist first as root)
+          for p in "$GITHUB_WORKSPACE/${{ inputs.task }}/reference.patch" "$GITHUB_WORKSPACE/.git/HEAD" \
+                   "$GITHUB_WORKSPACE/.git/modules/sut/lims/HEAD" "$GITHUB_WORKSPACE/sut/lims/README.md"; do
+            test -e "$p" || { echo "expected path missing: $p"; exit 1; }
+            if runuser -u agent -- test -r "$p"; then echo "agent can read $p"; exit 1; fi
+          done
+          if pgrep -u agent; then echo "agent processes survived the run"; exit 1; fi
+          test "$(stat -c %U /bench-runs/*/testlog.jsonl)" = root
       - name: Score twice and require identical results
         run: |
           d="$(ls -d /bench-runs/*/)"
@@ -115,8 +120,18 @@ jobs:
           bench score "$d" --task "${{ inputs.task }}" --sut-repo "$GITHUB_WORKSPACE/sut/lims"
           diff /tmp/score-first.json "$d/score.json"
           cat "$d/score.json" >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload run directory
+      - name: Refuse to publish a run directory that contains a credential
+        id: scan
         if: always()
+        env:
+          SECRET_OAUTH: ${{ inputs.auth == 'subscription' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
+          SECRET_API: ${{ inputs.auth == 'api' && secrets.ANTHROPIC_API_KEY || '' }}
+        run: |
+          for s in "$SECRET_OAUTH" "$SECRET_API"; do
+            if [ -n "$s" ] && grep -rqF -- "$s" /bench-runs; then echo "credential found in /bench-runs"; exit 1; fi
+          done
+      - name: Upload run directory (artifacts of this public repository are world-readable)
+        if: always() && steps.scan.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: run-${{ inputs.condition }}-r${{ matrix.rep }}-${{ github.run_id }}
