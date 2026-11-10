@@ -76,7 +76,9 @@ def mutation(
         workdir = tree / task.workdir
         _mutmut_config(workdir, task, valid)
         log = [f"[setup.cfg]\n{(workdir / 'setup.cfg').read_text()}"]
-        for command in (["run"], ["results", "--all", "true"], ["export-cicd-stats"]):
+        # One worker: parallel workers each run the SUT's session fixtures against the same database,
+        # and LIMS's conftest drops and recreates the schema, so races turn survivors into spurious kills.
+        for command in (["run", "--max-children", "1"], ["results", "--all", "true"], ["export-cicd-stats"]):
             proc = subprocess.run([sys.executable, "-m", "mutmut", *command], cwd=workdir, env=dict(env),
                                   capture_output=True, text=True, check=False)
             log.append(f"[mutmut {' '.join(command)}] exit={proc.returncode}\n{proc.stdout}\n{proc.stderr}")
