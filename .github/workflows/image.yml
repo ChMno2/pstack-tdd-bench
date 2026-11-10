@@ -1,0 +1,88 @@
+name: image
+
+# Builds the pinned runner image and smoke-tests it. No API credentials are involved here.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - image/Dockerfile
+      - .github/workflows/image.yml
+      - bench/**
+      - pyproject.toml
+      - vendor/**
+      - sut/**
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/chmno2/pstack-tdd-bench
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      image: ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: image/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+      - name: Report digest
+        run: echo "${{ env.IMAGE }}@${{ steps.push.outputs.digest }}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    container:
+      image: ${{ needs.build.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+        env:
+          POSTGRES_USER: lims
+          POSTGRES_PASSWORD: lims
+          POSTGRES_DB: lims
+        options: >-
+          --health-cmd "pg_isready -U lims" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine@sha256:7b1753b4c5ad8458906c272a8132b8c15f5557b000379eb115fb239706a384b7
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://lims:lims@postgres:5432/lims
+      TEST_DATABASE_URL: postgresql+asyncpg://lims:lims@postgres:5432/lims_test
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ci-test-secret-not-for-prod
+      ENV: ci
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Pinned CLI version
+        run: claude --version | grep -q '^2.1.322'
+      - name: benchlog plugin importable
+        run: python -c "import bench.testlog.plugin"
+      - name: Agent user exists and can run the CLI
+        run: runuser -u agent -- claude --version
+      - name: LIMS backend tests pass in this image
+        working-directory: sut/lims/backend
+        run: python -m pytest -q -p no:cacheprovider
