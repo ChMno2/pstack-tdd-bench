@@ -26,7 +26,7 @@ ENV DISABLE_UPDATES=1 \
 
 # LIMS backend dependencies (pinned by the LIMS commit) plus scoring tools.
 COPY sut/lims/backend/requirements.txt sut/lims/backend/requirements-dev.txt /tmp/lims/
-RUN pip install -r /tmp/lims/requirements.txt -r /tmp/lims/requirements-dev.txt mutmut==3.8.1
+RUN pip install -r /tmp/lims/requirements.txt -r /tmp/lims/requirements-dev.txt mutmut==3.7.0
 
 # bench itself, so its pytest plugin (benchlog) auto-loads for every pytest run in the container.
 COPY pyproject.toml /opt/bench-src/
