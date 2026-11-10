@@ -6,6 +6,7 @@ on:
   push:
     paths:
       - image/**
+      - "!image/IMAGE_DIGEST"
       - .github/workflows/image.yml
       - bench/**
       - pyproject.toml
