@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - image/Dockerfile
+      - image/**
       - .github/workflows/image.yml
       - bench/**
       - pyproject.toml

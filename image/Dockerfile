@@ -24,14 +24,14 @@ RUN curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_CODE_VERSION}" \
 ENV DISABLE_UPDATES=1 \
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 
-# LIMS backend dependencies (pinned by the LIMS commit) plus scoring tools.
-COPY sut/lims/backend/requirements.txt sut/lims/backend/requirements-dev.txt /tmp/lims/
-RUN pip install -r /tmp/lims/requirements.txt -r /tmp/lims/requirements-dev.txt mutmut==3.7.0
+# LIMS backend dependencies plus scoring tools, every transitive version locked (see image/lock.sh).
+COPY image/requirements.lock /tmp/requirements.lock
+RUN pip install --no-deps -r /tmp/requirements.lock && pip check
 
 # bench itself, so its pytest plugin (benchlog) auto-loads for every pytest run in the container.
 COPY pyproject.toml /opt/bench-src/
 COPY bench /opt/bench-src/bench
-RUN pip install /opt/bench-src && rm -rf /opt/bench-src
+RUN pip install --no-deps /opt/bench-src && rm -rf /opt/bench-src
 
 # Unmodified pstack (Claude Code tree), readable by the agent.
 COPY vendor/pstack /opt/pstack
