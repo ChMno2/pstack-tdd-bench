@@ -86,3 +86,92 @@ jobs:
       - name: LIMS backend tests pass in this image
         working-directory: sut/lims/backend
         run: python -m pytest -q -p no:cacheprovider
+
+  # End-to-end pipeline check with a scripted fake agent (no model credentials): it writes a failing
+  # regression test, runs pytest, fixes LIMS's pagination offset, and reruns pytest.
+  pipeline-dry-run:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    container:
+      image: ${{ needs.build.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+        env:
+          POSTGRES_USER: lims
+          POSTGRES_PASSWORD: lims
+          POSTGRES_DB: lims
+        options: >-
+          --health-cmd "pg_isready -U lims" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine@sha256:7b1753b4c5ad8458906c272a8132b8c15f5557b000379eb115fb239706a384b7
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://lims:lims@postgres:5432/lims
+      TEST_DATABASE_URL: postgresql+asyncpg://lims:lims@postgres:5432/lims_test
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ci-test-secret-not-for-prod
+      ENV: ci
+      BENCH_IMAGE_DIGEST: ${{ needs.build.outputs.image }}
+      BENCH_POSTGRES_DIGEST: postgres:16-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+      BENCH_REDIS_DIGEST: redis:7-alpine@sha256:7b1753b4c5ad8458906c272a8132b8c15f5557b000379eb115fb239706a384b7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install the fake agent, then lock the checkout away from the agent user
+        run: |
+          install -m 0644 tests/fixtures/fake_claude.py /usr/local/lib/fake_claude.py
+          printf '#!/bin/sh\nexec python3 /usr/local/lib/fake_claude.py lims_tdd /tmp/fake-state "$@"\n' > /usr/local/bin/fake-claude
+          chmod 755 /usr/local/bin/fake-claude
+          chown -R root:root "$GITHUB_WORKSPACE" && chmod 700 "$GITHUB_WORKSPACE"
+      - name: Run T00-smoke with the fake agent as the agent user
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: dry-run-not-a-real-token
+        run: |
+          mkdir -p /bench-runs && chmod 755 /bench-runs
+          bench run --task tasks/T00-smoke --condition C1 --rep 1 --out /bench-runs \
+            --sut-repo "$GITHUB_WORKSPACE/sut/lims" --plugin-dir /opt/pstack --home /home/agent \
+            --as-user agent --claude-bin /usr/local/bin/fake-claude
+      - name: The agent cannot read the reference implementation
+        run: |
+          if runuser -u agent -- cat "$GITHUB_WORKSPACE/tasks/T00-smoke/reference.patch" > /dev/null 2>&1; then
+            echo "agent can read the reference patch"; exit 1
+          fi
+      - name: Score twice, require identical results and the expected verdict
+        run: |
+          d=/bench-runs/T00-smoke-C1-r1
+          bench score "$d" --task tasks/T00-smoke --sut-repo "$GITHUB_WORKSPACE/sut/lims"
+          cp "$d/score.json" /tmp/score-first.json
+          bench score "$d" --task tasks/T00-smoke --sut-repo "$GITHUB_WORKSPACE/sut/lims"
+          diff /tmp/score-first.json "$d/score.json"
+          python3 - "$d" <<'PY'
+          import json, sys
+          d = sys.argv[1]
+          run, s = json.load(open(f"{d}/run.json")), json.load(open(f"{d}/score.json"))
+          added = ["tests/test_pagination_offset.py::test_first_page_starts_at_zero",
+                   "tests/test_pagination_offset.py::test_second_page_offset"]
+          assert run["status"] == "completed", run["status"]
+          assert "unknown" not in run["fingerprint"].values(), run["fingerprint"]
+          assert s["tests"]["added"] == added, s["tests"]
+          assert s["red"]["red"] is True, s["red"]
+          assert s["green"]["valid"] == added, s["green"]
+          assert s["adherence"]["followed"] is True, s["adherence"]
+          assert s["mutation"]["total"] > 0 and s["mutation"]["killed"] > 0, s["mutation"]
+          assert s["planted"] == {"off_by_one": True}, s["planted"]
+          assert s["contaminated"] is False
+          print(json.dumps(s, indent=2))
+          PY
+          cat "$d/score.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload dry-run directory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-dry-run-${{ github.run_id }}
+          path: /bench-runs
+          retention-days: 30
