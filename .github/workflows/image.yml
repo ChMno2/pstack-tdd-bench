@@ -129,7 +129,8 @@ jobs:
           install -m 0644 tests/fixtures/fake_claude.py /usr/local/lib/fake_claude.py
           printf '#!/bin/sh\nexec python3 /usr/local/lib/fake_claude.py lims_tdd /tmp/fake-state "$@"\n' > /usr/local/bin/fake-claude
           chmod 755 /usr/local/bin/fake-claude
-          chown -R root:root "$GITHUB_WORKSPACE" && chmod 700 "$GITHUB_WORKSPACE"
+          chown -R root:root "$GITHUB_WORKSPACE/tasks" "$GITHUB_WORKSPACE/sut"
+          chmod 700 "$GITHUB_WORKSPACE/tasks" "$GITHUB_WORKSPACE/sut"
       - name: Run T00-smoke with the fake agent as the agent user
         env:
           CLAUDE_CODE_OAUTH_TOKEN: dry-run-not-a-real-token
@@ -142,6 +143,9 @@ jobs:
         run: |
           if runuser -u agent -- cat "$GITHUB_WORKSPACE/tasks/T00-smoke/reference.patch" > /dev/null 2>&1; then
             echo "agent can read the reference patch"; exit 1
+          fi
+          if runuser -u agent -- git -C "$GITHUB_WORKSPACE/sut/lims" log -1 > /dev/null 2>&1; then
+            echo "agent can read the SUT's git history"; exit 1
           fi
       - name: Score twice, require identical results and the expected verdict
         run: |

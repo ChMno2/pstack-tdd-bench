@@ -86,8 +86,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Lock the bench checkout (tasks, references, planted bugs) away from the agent
-        run: chown -R root:root "$GITHUB_WORKSPACE" && chmod 700 "$GITHUB_WORKSPACE"
+      - name: Lock tasks (references, planted bugs) and the SUT's git history away from the agent
+        run: |
+          chown -R root:root "$GITHUB_WORKSPACE/tasks" "$GITHUB_WORKSPACE/sut"
+          chmod 700 "$GITHUB_WORKSPACE/tasks" "$GITHUB_WORKSPACE/sut"
       - name: Run the agent
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.auth == 'subscription' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
@@ -101,6 +103,9 @@ jobs:
         run: |
           if runuser -u agent -- cat "$GITHUB_WORKSPACE/${{ inputs.task }}/reference.patch" > /dev/null 2>&1; then
             echo "agent can read the reference patch"; exit 1
+          fi
+          if runuser -u agent -- git -C "$GITHUB_WORKSPACE/sut/lims" log -1 > /dev/null 2>&1; then
+            echo "agent can read the SUT's git history"; exit 1
           fi
       - name: Score twice and require identical results
         run: |
