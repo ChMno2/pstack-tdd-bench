@@ -21,15 +21,15 @@ def _session(sid: str, text: str, *, is_error: bool = False) -> None:
            "usage": {"input_tokens": 3, "output_tokens": 7}, "modelUsage": {"claude-sonnet-5-5": {"outputTokens": 7}}})
 
 
-LIMS_TEST = '''from app.common.dependencies.pagination import PaginationParams
+LIMS_TEST = '''from app.services.sample_service import normalize_lab_code_from_lab_code
 
 
-def test_first_page_starts_at_zero():
-    assert PaginationParams(page=1, page_size=20).offset == 0
+def test_strips_surrounding_spaces():
+    assert normalize_lab_code_from_lab_code(" lab-a ") == "A"
 
 
-def test_second_page_offset():
-    assert PaginationParams(page=2, page_size=20).offset == 20
+def test_plain_code():
+    assert normalize_lab_code_from_lab_code("LAB-B") == "B"
 '''
 
 
@@ -37,12 +37,12 @@ def _lims_tdd() -> None:
     """Behave like a TDD agent on T00-smoke: red test, then the fix, then green."""
     import subprocess
 
-    Path("backend/tests/test_pagination_offset.py").write_text(LIMS_TEST)
-    pytest = [sys.executable, "-m", "pytest", "tests/test_pagination_offset.py", "-q"]
+    Path("backend/tests/test_normalize_lab_code.py").write_text(LIMS_TEST)
+    pytest = [sys.executable, "-m", "pytest", "tests/test_normalize_lab_code.py", "-q"]
     subprocess.run(pytest, cwd="backend", check=False)
     time.sleep(2.5)  # let the 1-second watcher record the red run before the first production edit
-    src = Path("backend/app/common/dependencies/pagination.py")
-    src.write_text(src.read_text().replace("return self.page * self.page_size", "return (self.page - 1) * self.page_size"))
+    src = Path("backend/app/services/sample_service.py")
+    src.write_text(src.read_text().replace("cleaned = lab_code.upper()", "cleaned = lab_code.strip().upper()"))
     subprocess.run(pytest, cwd="backend", check=False)
 
 

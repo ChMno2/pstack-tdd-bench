@@ -88,7 +88,7 @@ jobs:
         run: python -m pytest -q -p no:cacheprovider
 
   # End-to-end pipeline check with a scripted fake agent (no model credentials): it writes a failing
-  # regression test, runs pytest, fixes LIMS's pagination offset, and reruns pytest.
+  # regression test, runs pytest, fixes LIMS's lab-code normaliser, and reruns pytest.
   pipeline-dry-run:
     needs: build
     runs-on: ubuntu-24.04
@@ -154,8 +154,8 @@ jobs:
           import json, sys
           d = sys.argv[1]
           run, s = json.load(open(f"{d}/run.json")), json.load(open(f"{d}/score.json"))
-          added = ["tests/test_pagination_offset.py::test_first_page_starts_at_zero",
-                   "tests/test_pagination_offset.py::test_second_page_offset"]
+          added = ["tests/test_normalize_lab_code.py::test_plain_code",
+                   "tests/test_normalize_lab_code.py::test_strips_surrounding_spaces"]
           assert run["status"] == "completed", run["status"]
           assert "unknown" not in run["fingerprint"].values(), run["fingerprint"]
           assert s["tests"]["added"] == added, s["tests"]
@@ -163,7 +163,7 @@ jobs:
           assert s["green"]["valid"] == added, s["green"]
           assert s["adherence"]["followed"] is True, s["adherence"]
           assert s["mutation"]["total"] > 0 and s["mutation"]["killed"] > 0, s["mutation"]
-          assert s["planted"] == {"off_by_one": True}, s["planted"]
+          assert s["planted"] == {"boundary": True}, s["planted"]
           assert s["contaminated"] is False
           print(json.dumps(s, indent=2))
           PY
