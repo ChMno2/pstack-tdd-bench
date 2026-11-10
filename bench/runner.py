@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
+import pwd
 import subprocess
 import time
 from collections.abc import Mapping
@@ -16,7 +16,15 @@ from bench.conditions import Condition, build_cli_args, build_env, render_prompt
 from bench.fingerprint import collect
 from bench.pins import AUTO_REPLY, MAX_AUTO_REPLIES, MODEL_ID
 from bench.task import Task
-from bench.trajectory import Event, convert_stream, final_text, session_id, totals, usage_by_agent, write_jsonl
+from bench.trajectory import (
+    Event,
+    convert_stream,
+    final_text,
+    session_id,
+    totals,
+    usage_by_agent,
+    write_jsonl,
+)
 from bench.watch import ProdWatcher, first_change
 
 
@@ -43,11 +51,17 @@ def _now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _owner(user: str) -> tuple[int, int]:
+    entry = pwd.getpwnam(user)
+    return entry.pw_uid, entry.pw_gid
+
+
 def _chown_tree(path: Path, user: str) -> None:
-    shutil.chown(path, user=user, group=user)
+    uid, gid = _owner(user)
+    os.chown(path, uid, gid)
     for root, dirs, files in os.walk(path):
         for name in dirs + files:
-            shutil.chown(os.path.join(root, name), user=user, group=user, follow_symlinks=False)
+            os.lchown(os.path.join(root, name), uid, gid)  # never follow symlinks out of the tree
 
 
 def _prepare(spec: RunSpec, testlog: Path) -> None:
@@ -59,7 +73,7 @@ def _prepare(spec: RunSpec, testlog: Path) -> None:
     if spec.as_user:
         _chown_tree(spec.workspace, spec.as_user)
         _chown_tree(spec.home, spec.as_user)
-        shutil.chown(testlog, user=spec.as_user, group=spec.as_user)
+        os.chown(testlog, *_owner(spec.as_user))
 
 
 def run(spec: RunSpec, base_env: Mapping[str, str]) -> dict:

@@ -115,3 +115,18 @@ def test_c2a_writes_pstack_models(tmp_path, mini_sut_repo, mini_task):
 )
 def test_needs_decision_cases(text, expected):
     assert needs_decision(text) is expected
+
+
+def test_chown_tree_handles_symlinks_without_root(tmp_path):
+    """Regression: shutil.chown(follow_symlinks=...) does not exist on Python 3.12 (found in the CI dry run)."""
+    import getpass
+
+    from bench.runner import _chown_tree
+
+    tree = tmp_path / "ws"
+    (tree / "pkg").mkdir(parents=True)
+    (tree / "pkg/a.py").write_text("x = 1\n")
+    (tree / "link.py").symlink_to("pkg/a.py")
+    (tree / "dangling.py").symlink_to("missing.py")
+    _chown_tree(tree, getpass.getuser())
+    assert (tree / "pkg/a.py").stat().st_uid == os.getuid()

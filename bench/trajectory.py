@@ -150,8 +150,7 @@ def bash_commands(events: Sequence[Event]) -> list[str]:
 
 def write_jsonl(events: Sequence[Event], path: Path) -> None:
     with open(path, "w", encoding="utf-8") as fh:
-        for e in events:
-            fh.write(json.dumps(asdict(e), ensure_ascii=False) + "\n")
+        fh.writelines(json.dumps(asdict(e), ensure_ascii=False) + "\n" for e in events)
 
 
 def read_jsonl(path: Path) -> list[Event]:
