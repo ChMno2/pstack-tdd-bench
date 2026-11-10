@@ -73,3 +73,13 @@ def test_planted_bug_detected(trees, reference, mini_task, env):
     assert planted(reference, final, mini_task, STRONG_IDS, scoring_env(env)) == {"off_by_one": True}
     write(final, "backend/tests/test_new.py", "from app.calc import is_even\n\n\ndef test_two():\n    assert is_even(2)\n")
     assert planted(reference, final, mini_task, ["tests/test_new.py::test_two"], scoring_env(env)) == {"off_by_one": False}
+
+
+def test_mutation_writes_logs_when_asked(trees, reference, mini_task, env, tmp_path: Path):
+    _, final = trees
+    write(final, "backend/tests/test_new.py", STRONG)
+    logs = tmp_path / "scoring"
+    mutation(reference, final, mini_task, STRONG_IDS, 3, scoring_env(env), log_dir=logs)
+    text = (logs / "mutmut.log").read_text()
+    assert "[mutmut run]" in text and "[mutmut results --all true]" in text
+    assert "[setup.cfg]" in text and "only_mutate" in text

@@ -54,7 +54,7 @@ def score_run(run_dir: Path, task: Task, *, sut_repo: Path, env: Mapping[str, st
             "green": asdict(green),
             "adherence": asdict(adherence(testlog, set(diff.added), run.get("first_prod_change"))),
             "coverage": coverage(reference, final, task, green.valid, senv),
-            "mutation": mutation(reference, final, task, green.valid, len(diff.added), senv),
+            "mutation": mutation(reference, final, task, green.valid, len(diff.added), senv, log_dir=run_dir / "scoring"),
             "planted": planted(reference, final, task, green.valid, senv),
             "contaminated": contaminated(events),
             "cost": {key: run.get(key) for key in ("usage_by_agent", "totals", "auto_replies")},

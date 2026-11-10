@@ -60,7 +60,13 @@ def _mutmut_config(workdir: Path, task: Task, valid: Sequence[str]) -> None:
 
 
 def mutation(
-    reference: Path, final: Path, task: Task, valid: Sequence[str], added_count: int, env: Mapping[str, str]
+    reference: Path,
+    final: Path,
+    task: Task,
+    valid: Sequence[str],
+    added_count: int,
+    env: Mapping[str, str],
+    log_dir: Path | None = None,
 ) -> dict:
     """killed counts mutmut's killed and timeout outcomes; score = killed / total; per_test = killed / added_count."""
     if not valid:
@@ -69,9 +75,14 @@ def mutation(
         tree = _tests_on(reference, final, task, Path(tmp) / "tree")
         workdir = tree / task.workdir
         _mutmut_config(workdir, task, valid)
-        for command in (["run"], ["export-cicd-stats"]):
-            subprocess.run([sys.executable, "-m", "mutmut", *command], cwd=workdir, env=dict(env),
-                           capture_output=True, text=True)
+        log = [f"[setup.cfg]\n{(workdir / 'setup.cfg').read_text()}"]
+        for command in (["run"], ["results", "--all", "true"], ["export-cicd-stats"]):
+            proc = subprocess.run([sys.executable, "-m", "mutmut", *command], cwd=workdir, env=dict(env),
+                                  capture_output=True, text=True, check=False)
+            log.append(f"[mutmut {' '.join(command)}] exit={proc.returncode}\n{proc.stdout}\n{proc.stderr}")
+        if log_dir is not None:
+            Path(log_dir).mkdir(parents=True, exist_ok=True)
+            (Path(log_dir) / "mutmut.log").write_text("\n".join(log), encoding="utf-8")
         stats_file = workdir / "mutants/mutmut-cicd-stats.json"
         stats = json.loads(stats_file.read_text()) if stats_file.exists() else {}
     killed = int(stats.get("killed", 0)) + int(stats.get("timeout", 0))

@@ -168,6 +168,9 @@ jobs:
           print(json.dumps(s, indent=2))
           PY
           cat "$d/score.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Show scoring logs on failure
+        if: failure()
+        run: tail -n 150 /bench-runs/*/scoring/mutmut.log || true
       - name: Upload dry-run directory
         if: always()
         uses: actions/upload-artifact@v4
