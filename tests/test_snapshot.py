@@ -60,3 +60,20 @@ def test_bad_patch_raises(mini_sut_repo, mini_task: Task, tmp_path: Path):
     bad.write_text("--- a/nope.py\n+++ b/nope.py\n@@ -1 +1 @@\n-x\n+y\n")
     with pytest.raises(SnapshotError):
         apply_patch(snap, bad)
+
+
+def test_empty_start_patch_gives_the_sut_as_is(mini_sut_repo, mini_task, tmp_path: Path):
+    """Feature tasks often start from the SUT unchanged, so start.patch may be empty."""
+    import shutil
+
+    from bench.task import load_task
+
+    repo, commit = mini_sut_repo
+    root = tmp_path / "task"
+    shutil.copytree(mini_task.root, root)
+    (root / "start.patch").write_text("")
+    (root / "reference.patch").write_text("")
+    task = load_task(root)
+    snap = build_snapshot(repo, commit, task, tmp_path / "snap")
+    assert "return n % 2 == 0" in _calc(snap)
+    assert "return n % 2 == 0" in _calc(build_reference(snap, task, tmp_path / "ref"))

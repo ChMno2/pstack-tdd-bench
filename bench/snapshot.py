@@ -41,7 +41,7 @@ def _ensure_repo(tree: Path) -> None:
 
 def apply_patch(tree: Path, patch: Path) -> None:
     _ensure_repo(tree)
-    _git(tree, "apply", "--whitespace=nowarn", str(Path(patch).resolve()))
+    _git(tree, "apply", "--allow-empty", "--whitespace=nowarn", str(Path(patch).resolve()))
 
 
 def build_snapshot(sut_repo: Path, commit: str, task: Task, dest: Path) -> Path:

@@ -13,6 +13,7 @@ from bench.runner import RunSpec, run
 from bench.scoring.score import score_run
 from bench.snapshot import build_snapshot
 from bench.task import load_task
+from bench.task_check import check_task
 
 
 def _common(p: argparse.ArgumentParser) -> None:
@@ -37,12 +38,22 @@ def _parser() -> argparse.ArgumentParser:
     s = sub.add_parser("score", help="score a finished run directory")
     s.add_argument("run_dir", type=Path)
     _common(s)
+    c = sub.add_parser("check-task", help="check that a task's patches apply to the pinned SUT")
+    _common(c)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     task = load_task(args.task)
+    if args.command == "check-task":
+        problems = check_task(task, sut_repo=args.sut_repo, commit=args.commit)
+        for problem in problems:
+            print(f"PROBLEM: {problem}")
+        if problems:
+            return 1
+        print(f"OK: {task.id}")
+        return 0
     if args.command == "run":
         cond = CONDITIONS[args.condition]
         run_dir = args.out / f"{task.id}-{cond.id}-r{args.rep}"

@@ -9,3 +9,5 @@ __pycache__/
 .DS_Store
 # local run outputs (trajectories are published separately)
 runs/
+*.egg-info/
+mutants/

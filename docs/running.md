@@ -31,6 +31,19 @@ gh workflow run run.yml -R ChMno2/pstack-tdd-bench \
 - `reps`：1 到 3。每次重複都在全新的容器裡執行。
 - `auth`：試跑用 `subscription`，正式執行用 `api`。兩者不會同時注入。
 
+也可以從網頁觸發：到 repo 的 **Actions** 分頁，左側選 **run**，按 **Run workflow**，填入同樣四個欄位。`run.yml` 只能從 main 分支觸發。
+
+任務第一次使用前，先在本機執行 `bench check-task --task tasks/<id>`，確認 patch 都套得上。寫任務的方法見 [writing-tasks.md](writing-tasks.md)。
+
+## 下載與檢視結果
+
+```bash
+gh run list -R ChMno2/pstack-tdd-bench --workflow run.yml --limit 5
+gh run download <run-id> -R ChMno2/pstack-tdd-bench -D results/
+```
+
+每次重複會解開成 `results/run-<條件>-r<重複>-<run-id>/<任務>-<條件>-r<重複>/`。不下載也能看分數：每個 job 的 Summary 頁面會直接列出 `score.json`。
+
 每次重複會上傳一個 artifact，保留 90 天，內容是整個執行目錄。**這個 repo 是公開的，artifact 任何人都下載得到。** 執行器會把憑證的值從執行目錄裡的所有檔案中遮蔽成 `[REDACTED]`。上傳前，workflow 會再掃描一次，只要找到憑證就不上傳。
 
 | 檔案 | 內容 |
