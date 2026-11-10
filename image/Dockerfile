@@ -6,9 +6,7 @@ LABEL org.opencontainers.image.source="https://github.com/ChMno2/pstack-tdd-benc
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=UTC \
     PYTHONHASHSEED=0 \
-    PIP_NO_CACHE_DIR=1 \
-    DISABLE_UPDATES=1 \
-    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+    PIP_NO_CACHE_DIR=1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git curl ca-certificates util-linux bash \
@@ -21,6 +19,10 @@ RUN curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_CODE_VERSION}" \
     && chmod 755 /usr/local/bin/claude \
     && rm -rf /root/.local/share/claude /root/.local/bin/claude \
     && claude --version | grep -q "^${CLAUDE_CODE_VERSION}"
+
+# Set only after installing: the installer itself refuses to run while updates are disabled.
+ENV DISABLE_UPDATES=1 \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 
 # LIMS backend dependencies (pinned by the LIMS commit) plus scoring tools.
 COPY sut/lims/backend/requirements.txt sut/lims/backend/requirements-dev.txt /tmp/lims/
