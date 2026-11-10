@@ -1,0 +1,75 @@
+from pathlib import Path
+
+import pytest
+
+from bench.scoring.quality import coverage, mutation, planted
+from bench.scoring.testdiff import scoring_env
+from bench.snapshot import build_reference
+from tests.scoring.conftest import write
+
+STRONG = (
+    "from app.calc import add, clamp, is_even\n\n\n"
+    "def test_add():\n    assert add(2, 3) == 5\n    assert add(-1, 1) == 0\n\n\n"
+    "def test_clamp():\n    assert clamp(10, 0, 5) == 5\n    assert clamp(-3, 0, 5) == 0\n    assert clamp(3, 0, 5) == 3\n\n\n"
+    "def test_is_even():\n    assert is_even(2)\n    assert not is_even(3)\n"
+)
+STRONG_IDS = ["tests/test_new.py::test_add", "tests/test_new.py::test_clamp", "tests/test_new.py::test_is_even"]
+WEAK = (
+    "from app.calc import add, clamp, is_even\n\n\n"
+    "def test_calls():\n    add(1, 2)\n    clamp(1, 0, 5)\n    is_even(4)\n"
+)
+WEAK_IDS = ["tests/test_new.py::test_calls"]
+
+
+@pytest.fixture
+def reference(trees, mini_task, tmp_path: Path) -> Path:
+    snapshot, _ = trees
+    return build_reference(snapshot, mini_task, tmp_path / "reference")
+
+
+def test_coverage_counts_only_task_modules(trees, reference, mini_task, env):
+    _, final = trees
+    write(final, "backend/tests/test_new.py", "from app.calc import is_even\n\n\ndef test_two():\n    assert is_even(2)\n")
+    ids = ["tests/test_new.py::test_two"]
+    before = coverage(reference, final, mini_task, ids, scoring_env(env))
+    write(reference, "backend/app/other.py", "def f(x):\n    if x:\n        return 1\n    return 2\n")
+    after = coverage(reference, final, mini_task, ids, scoring_env(env))
+    assert 0.0 < before["line"] < 1.0
+    assert before == after
+
+
+def test_empty_valid_gives_zero(trees, reference, mini_task, env):
+    _, final = trees
+    assert coverage(reference, final, mini_task, [], scoring_env(env)) == {"line": 0.0, "branch": 0.0}
+    assert mutation(reference, final, mini_task, [], 0, scoring_env(env)) == {
+        "killed": 0, "total": 0, "score": 0.0, "per_test": 0.0}
+    assert planted(reference, final, mini_task, [], scoring_env(env)) == {"off_by_one": False}
+
+
+def test_mutation_kills_with_strong_test(trees, reference, mini_task, env):
+    _, final = trees
+    write(final, "backend/tests/test_new.py", STRONG)
+    result = mutation(reference, final, mini_task, STRONG_IDS, 3, scoring_env(env))
+    assert result["total"] > 0
+    assert result["killed"] > 0
+    assert result["score"] == pytest.approx(result["killed"] / result["total"])
+    assert result["per_test"] == pytest.approx(result["killed"] / 3)
+    assert result["score"] > 0.5
+
+
+def test_weak_test_kills_less(trees, reference, mini_task, env):
+    _, final = trees
+    write(final, "backend/tests/test_new.py", STRONG)
+    strong = mutation(reference, final, mini_task, STRONG_IDS, 3, scoring_env(env))
+    write(final, "backend/tests/test_new.py", WEAK)
+    weak = mutation(reference, final, mini_task, WEAK_IDS, 1, scoring_env(env))
+    assert weak["total"] == strong["total"]
+    assert weak["score"] < strong["score"]
+
+
+def test_planted_bug_detected(trees, reference, mini_task, env):
+    _, final = trees
+    write(final, "backend/tests/test_new.py", STRONG)
+    assert planted(reference, final, mini_task, STRONG_IDS, scoring_env(env)) == {"off_by_one": True}
+    write(final, "backend/tests/test_new.py", "from app.calc import is_even\n\n\ndef test_two():\n    assert is_even(2)\n")
+    assert planted(reference, final, mini_task, ["tests/test_new.py::test_two"], scoring_env(env)) == {"off_by_one": False}
