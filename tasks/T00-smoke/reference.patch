@@ -1,0 +1,13 @@
+diff --git a/backend/app/common/dependencies/pagination.py b/backend/app/common/dependencies/pagination.py
+index 80e8475..0b0ccfd 100644
+--- a/backend/app/common/dependencies/pagination.py
++++ b/backend/app/common/dependencies/pagination.py
+@@ -12,7 +12,7 @@ class PaginationParams(BaseModel):
+ 
+     @property
+     def offset(self) -> int:
+-        return self.page * self.page_size
++        return (self.page - 1) * self.page_size
+ 
+ 
+ def get_pagination(

@@ -1,0 +1,13 @@
+diff --git a/backend/app/calc.py b/backend/app/calc.py
+index dd8fb99..4b1237b 100644
+--- a/backend/app/calc.py
++++ b/backend/app/calc.py
+@@ -3,7 +3,7 @@ def add(a: int, b: int) -> int:
+ 
+ 
+ def clamp(x: int, lo: int, hi: int) -> int:
+-    return max(lo, min(x, hi))
++    return max(lo, min(x, hi - 1))
+ 
+ 
+ def is_even(n: int) -> bool:

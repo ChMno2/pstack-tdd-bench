@@ -1,0 +1,15 @@
+id: T00-smoke
+kind: bugfix
+workdir: backend
+test_command: cd backend && python -m pytest
+modules:
+  - app/common/dependencies/pagination.py
+prod_globs:
+  - backend/app/**/*.py
+planted:
+  - off_by_one
+description: |
+  Bug report: paginated list endpoints skip the first page of results.
+  With the default page size of 20, requesting page=1 returns items 21-40
+  instead of items 1-20, and the first 20 items can never be reached.
+  Find the cause and fix it so that page 1 starts at the first item.
