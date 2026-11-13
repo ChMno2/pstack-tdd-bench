@@ -1,0 +1,13 @@
+diff --git a/backend/app/services/sample_service.py b/backend/app/services/sample_service.py
+index 9c6ffcc..809df47 100644
+--- a/backend/app/services/sample_service.py
++++ b/backend/app/services/sample_service.py
+@@ -348,7 +348,7 @@ def normalize_lab_code_from_lab_code(lab_code: str | None):
+ 
+     cleaned = lab_code.strip().upper()
+ 
+-    if cleaned.startswith("LAB-") and len(cleaned) > 4:
++    if cleaned.startswith("LAB-") and len(cleaned) > 5:
+         return cleaned.split("-", 1)[1]
+ 
+     return cleaned

@@ -1,0 +1,5 @@
+# Inputs for image/requirements.lock. Regenerate with image/lock.sh, never by hand.
+-r ../sut/lims/backend/requirements.txt
+-r ../sut/lims/backend/requirements-dev.txt
+mutmut==3.7.0
+pyyaml>=6

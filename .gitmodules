@@ -1,0 +1,3 @@
+[submodule "sut/lims"]
+	path = sut/lims
+	url = https://github.com/ChuuuDwarf/Cloud-Native-Development-Project.git

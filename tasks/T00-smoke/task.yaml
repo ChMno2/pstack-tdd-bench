@@ -1,0 +1,15 @@
+id: T00-smoke
+kind: bugfix
+workdir: backend
+test_command: cd backend && python -m pytest
+modules:
+  - app/services/sample_service.py
+prod_globs:
+  - backend/app/**/*.py
+planted:
+  - boundary
+description: |
+  Bug report: lab codes that arrive with surrounding whitespace are not normalised by the
+  sample service. normalize_lab_code_from_lab_code(" lab-a ") in app/services/sample_service.py
+  returns " LAB-A " instead of "A", so a sample whose lab code was typed with a stray space
+  never matches its lab. Fix it so surrounding whitespace is ignored.

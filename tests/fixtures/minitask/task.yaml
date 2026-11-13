@@ -1,0 +1,12 @@
+id: mini
+kind: bugfix
+workdir: backend
+test_command: cd backend && python -m pytest
+modules:
+  - app/calc.py
+prod_globs:
+  - backend/app/**/*.py
+planted:
+  - off_by_one
+description: |
+  is_even returns the wrong answer for every integer. Fix it.

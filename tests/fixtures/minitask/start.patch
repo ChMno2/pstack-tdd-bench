@@ -1,0 +1,10 @@
+diff --git a/backend/app/calc.py b/backend/app/calc.py
+index dd8fb99..d9422e4 100644
+--- a/backend/app/calc.py
++++ b/backend/app/calc.py
+@@ -7,4 +7,4 @@ def clamp(x: int, lo: int, hi: int) -> int:
+ 
+ 
+ def is_even(n: int) -> bool:
+-    return n % 2 == 0
++    return n % 2 == 1

@@ -1,0 +1,195 @@
+name: image
+
+# Builds the pinned runner image and smoke-tests it. No API credentials are involved here.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - image/**
+      - "!image/IMAGE_DIGEST"
+      - .github/workflows/image.yml
+      - bench/**
+      - pyproject.toml
+      - vendor/**
+      - sut/**
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/chmno2/pstack-tdd-bench
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      image: ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          persist-credentials: false
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: image/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+      - name: Report digest
+        run: echo "${{ env.IMAGE }}@${{ steps.push.outputs.digest }}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    container:
+      image: ${{ needs.build.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+        env:
+          POSTGRES_USER: lims
+          POSTGRES_PASSWORD: lims
+          POSTGRES_DB: lims
+        options: >-
+          --health-cmd "pg_isready -U lims" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine@sha256:7b1753b4c5ad8458906c272a8132b8c15f5557b000379eb115fb239706a384b7
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://lims:lims@postgres:5432/lims
+      TEST_DATABASE_URL: postgresql+asyncpg://lims:lims@postgres:5432/lims_test
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ci-test-secret-not-for-prod
+      ENV: ci
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          persist-credentials: false
+      - name: Pinned CLI version
+        run: claude --version | grep -q '^2.1.322'
+      - name: benchlog plugin importable
+        run: python -c "import bench.capture.pytest_plugin.benchlog"
+      - name: Agent user exists and can run the CLI
+        run: runuser -u agent -- claude --version
+      - name: LIMS backend tests pass in this image
+        working-directory: sut/lims/backend
+        run: python -m pytest -q -p no:cacheprovider
+
+  # End-to-end pipeline check with a scripted fake agent (no model credentials): it writes a failing
+  # regression test, runs pytest, fixes LIMS's lab-code normaliser, and reruns pytest.
+  pipeline-dry-run:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    container:
+      image: ${{ needs.build.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+        env:
+          POSTGRES_USER: lims
+          POSTGRES_PASSWORD: lims
+          POSTGRES_DB: lims
+        options: >-
+          --health-cmd "pg_isready -U lims" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine@sha256:7b1753b4c5ad8458906c272a8132b8c15f5557b000379eb115fb239706a384b7
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://lims:lims@postgres:5432/lims
+      TEST_DATABASE_URL: postgresql+asyncpg://lims:lims@postgres:5432/lims_test
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ci-test-secret-not-for-prod
+      ENV: ci
+      BENCH_IMAGE_DIGEST: ${{ needs.build.outputs.image }}
+      BENCH_POSTGRES_DIGEST: postgres:16-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+      BENCH_REDIS_DIGEST: redis:7-alpine@sha256:7b1753b4c5ad8458906c272a8132b8c15f5557b000379eb115fb239706a384b7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          persist-credentials: false
+      - name: Install the fake agent, then lock the checkout away from the agent user
+        run: |
+          install -m 0644 tests/fixtures/fake_claude.py /usr/local/lib/fake_claude.py
+          printf '#!/bin/sh\nexec python3 /usr/local/lib/fake_claude.py lims_tdd /tmp/fake-state "$@"\n' > /usr/local/bin/fake-claude
+          chmod 755 /usr/local/bin/fake-claude
+          chown -R root:root "$GITHUB_WORKSPACE/tasks" "$GITHUB_WORKSPACE/sut" "$GITHUB_WORKSPACE/.git"
+          chmod 700 "$GITHUB_WORKSPACE/tasks" "$GITHUB_WORKSPACE/sut" "$GITHUB_WORKSPACE/.git"
+      - name: Run T00-smoke with the fake agent as the agent user
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: dry-run-not-a-real-token
+        run: |
+          mkdir -p /bench-runs && chmod 755 /bench-runs
+          bench run --task tasks/T00-smoke --condition C1 --rep 1 --out /bench-runs \
+            --sut-repo "$GITHUB_WORKSPACE/sut/lims" --plugin-dir /opt/pstack --home /home/agent \
+            --as-user agent --claude-bin /usr/local/bin/fake-claude
+      - name: The agent cannot read references or SUT history, and left nothing running
+        run: |
+          # test -r fails only for lack of permission (the paths are checked to exist first as root)
+          for p in "$GITHUB_WORKSPACE/tasks/T00-smoke/reference.patch" "$GITHUB_WORKSPACE/.git/HEAD" \
+                   "$GITHUB_WORKSPACE/.git/modules/sut/lims/HEAD" "$GITHUB_WORKSPACE/sut/lims/README.md"; do
+            test -e "$p" || { echo "expected path missing: $p"; exit 1; }
+            if runuser -u agent -- test -r "$p"; then echo "agent can read $p"; exit 1; fi
+          done
+          if pgrep -u agent; then echo "agent processes survived the run"; exit 1; fi
+          test "$(stat -c %U /bench-runs/*/testlog.jsonl)" = root
+      - name: Score twice, require identical results and the expected verdict
+        run: |
+          d=/bench-runs/T00-smoke-C1-r1
+          bench score "$d" --task tasks/T00-smoke --sut-repo "$GITHUB_WORKSPACE/sut/lims"
+          cp "$d/score.json" /tmp/score-first.json
+          bench score "$d" --task tasks/T00-smoke --sut-repo "$GITHUB_WORKSPACE/sut/lims"
+          diff /tmp/score-first.json "$d/score.json"
+          python3 - "$d" <<'PY'
+          import json, sys
+          d = sys.argv[1]
+          run, s = json.load(open(f"{d}/run.json")), json.load(open(f"{d}/score.json"))
+          added = ["tests/test_normalize_lab_code.py::test_plain_code",
+                   "tests/test_normalize_lab_code.py::test_strips_surrounding_spaces"]
+          assert run["status"] == "completed", run["status"]
+          assert "unknown" not in run["fingerprint"].values(), run["fingerprint"]
+          assert s["tests"]["added"] == added, s["tests"]
+          assert s["red"]["red"] is True, s["red"]
+          assert s["green"]["valid"] == added, s["green"]
+          assert s["adherence"]["followed"] is True, s["adherence"]
+          assert s["mutation"]["total"] > 0 and s["mutation"]["killed"] > 0, s["mutation"]
+          assert s["planted"] == {"boundary": True}, s["planted"]
+          assert s["contaminated"] is False
+          print(json.dumps(s, indent=2))
+          PY
+          cat "$d/score.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Show scoring logs on failure
+        if: failure()
+        run: tail -n 150 /bench-runs/*/scoring/mutmut.log || true
+      - name: The dry-run credential was redacted from the run directory
+        id: scan
+        if: always()
+        run: |
+          if grep -rqF -- "dry-run-not-a-real-token" /bench-runs; then echo "credential found in /bench-runs"; exit 1; fi
+      - name: Upload dry-run directory
+        if: always() && steps.scan.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-dry-run-${{ github.run_id }}
+          path: /bench-runs
+          retention-days: 30
