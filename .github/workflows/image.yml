@@ -95,7 +95,7 @@ jobs:
   pipeline-dry-run:
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 180
     container:
       image: ${{ needs.build.outputs.image }}
       credentials:
@@ -175,12 +175,17 @@ jobs:
           assert s["mutation"]["total"] > 0 and s["mutation"]["killed"] > 0, s["mutation"]
           assert s["planted"] == {"boundary": True}, s["planted"]
           assert s["contaminated"] is False
+          assert s["green"]["reasons"] == {}, s["green"]
+          assert s["existing_suite"]["tests"] > 400, s["existing_suite"]
+          assert s["existing_suite"]["coverage"]["ok"] and s["existing_suite"]["mutation"]["ok"], s["existing_suite"]
+          assert s["increment"]["coverage"]["ok"] and s["increment"]["mutation"]["ok"], s["increment"]
+          assert s["regression"]["failing"] == [], s["regression"]
           print(json.dumps(s, indent=2))
           PY
           cat "$d/score.json" >> "$GITHUB_STEP_SUMMARY"
       - name: Show scoring logs on failure
         if: failure()
-        run: tail -n 150 /bench-runs/*/scoring/mutmut.log || true
+        run: tail -n 150 /bench-runs/*/scoring/mutmut.log /bench-runs/*/scoring/mutmut-existing.log || true
       - name: The dry-run credential was redacted from the run directory
         id: scan
         if: always()

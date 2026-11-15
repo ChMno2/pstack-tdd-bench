@@ -74,7 +74,7 @@ SUPPORT_DIR_PATTERNS = ("**/tests/**", "**/test/**")
 SKIP_PARTS = {".git", "__pycache__", ".pytest_cache", "mutants"}
 
 
-def _is_test_support(rel: Path) -> bool:
+def is_test_support(rel: Path) -> bool:
     """Test files plus everything under a tests/ directory (helpers, factories, __init__, data files)."""
     if any(fnmatch.fnmatch(rel.name, pattern) for pattern in TEST_FILE_PATTERNS):
         return True
@@ -87,7 +87,7 @@ def changed_test_files(snapshot: Path, final: Path, task: Task) -> list[Path]:
     changed = []
     for path in (final / task.workdir).rglob("*"):
         rel = path.relative_to(final)
-        if not path.is_file() or SKIP_PARTS & set(rel.parts) or path.suffix == ".pyc" or not _is_test_support(rel):
+        if not path.is_file() or SKIP_PARTS & set(rel.parts) or path.suffix == ".pyc" or not is_test_support(rel):
             continue
         original = snapshot / rel
         if not original.exists() or original.read_bytes() != path.read_bytes():

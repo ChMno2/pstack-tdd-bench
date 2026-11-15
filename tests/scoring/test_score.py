@@ -43,7 +43,7 @@ def test_score_json_schema(run_dir, mini_sut_repo, mini_task, env):
     score = _score(run_dir, mini_sut_repo, mini_task, env)
     assert json.loads((run_dir / "score.json").read_text()) == score
     assert set(score) == {"run_id", "status", "testless", "tests", "red", "green", "adherence", "coverage",
-                          "mutation", "planted", "contaminated", "cost"}
+                          "mutation", "planted", "contaminated", "cost", "existing_suite", "increment", "regression"}
     assert score["testless"] is False
     assert score["tests"] == {"added": ADDED, "removed": [], "modified": []}
     assert score["red"]["red"] is True
@@ -53,6 +53,13 @@ def test_score_json_schema(run_dir, mini_sut_repo, mini_task, env):
     assert score["mutation"]["total"] > 0 and score["mutation"]["killed"] > 0
     assert score["planted"] == {"off_by_one": True}
     assert score["contaminated"] is False
+    assert score["green"]["reasons"] == {}
+    assert score["existing_suite"]["tests"] == 1 and score["existing_suite"]["mutation"]["ok"] is True
+    # the existing suite covers add(); the new tests add the bodies of clamp() and is_even()
+    assert score["increment"]["coverage"]["new_lines"] == 2
+    assert score["increment"]["mutation"]["newly_killed"] > 0
+    assert score["regression"] == {"existing": 1, "failing": [], "already_failing": []}
+    assert (run_dir / "scoring/mutmut-existing.log").exists()
     assert score["cost"] == {"usage_by_agent": {"main": {"output": 7}}, "totals": {"total_cost_usd": 0.01},
                              "auto_replies": 0}
 
@@ -67,6 +74,9 @@ def test_testless_run(tmp_path, mini_sut_repo, mini_task, env):
     assert score["red"]["red"] is False
     assert score["mutation"] == {"ok": True, "error": None, "killed": 0, "total": 0, "score": 0.0, "per_test": 0.0}
     assert score["adherence"] == {"followed": False, "sessions": 0, "evidence": None, "unmeasured": False}
+    assert score["increment"]["coverage"]["new_lines"] == 0
+    assert score["increment"]["mutation"]["newly_killed"] == 0
+    assert score["regression"]["failing"] == []
 
 
 def test_score_runs_for_failed_run(tmp_path, mini_sut_repo, mini_task, env):

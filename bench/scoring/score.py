@@ -11,7 +11,8 @@ from pathlib import Path
 from bench.capture.trajectory import Event, bash_commands, read_jsonl
 from bench.pins import LIMS_COMMIT
 from bench.scoring.adherence import adherence, load_testlog
-from bench.scoring.quality import coverage, mutation, planted
+from bench.scoring.existing_suite import existing_tests, increment, measure_existing_suite, regression
+from bench.scoring.quality import coverage_detail, mutation_detail, planted
 from bench.scoring.redgreen import green_check, red_check
 from bench.scoring.testdiff import diff_tests, scoring_env
 from bench.task import Task
@@ -72,6 +73,11 @@ def score_run(run_dir: Path, task: Task, *, sut_repo: Path, env: Mapping[str, st
         diff = diff_tests(snapshot, final, task, senv)
         red = red_check(snapshot, final, task, diff.added, senv)
         green = green_check(reference, final, task, diff.added, senv)
+        existing = existing_tests(snapshot, task, senv)
+        base = measure_existing_suite(snapshot, reference, task, existing, senv, log_dir=run_dir / "scoring")
+        cov, cov_data = coverage_detail(reference, final, task, green.valid, senv)
+        mut, killed = mutation_detail(reference, final, task, green.valid, len(diff.added), senv,
+                                      log_dir=run_dir / "scoring")
         score = {
             "run_id": run.get("run_id"),
             "status": run.get("status"),
@@ -84,10 +90,13 @@ def score_run(run_dir: Path, task: Task, *, sut_repo: Path, env: Mapping[str, st
                 # the agent ran pytest but nothing was logged (e.g. a pytest that did not load benchlog)
                 "unmeasured": not testlog and any("pytest" in c for c in bash_commands(events)),
             },
-            "coverage": coverage(reference, final, task, green.valid, senv),
-            "mutation": mutation(reference, final, task, green.valid, len(diff.added), senv,
-                                 log_dir=run_dir / "scoring"),
+            "coverage": cov,
+            "mutation": mut,
             "planted": planted(reference, final, task, green.valid, senv),
+            "existing_suite": base.summary(),
+            "increment": increment(base, cov_data, killed),
+            "regression": regression(snapshot, reference, final, task, existing, senv,
+                                     reference_outcomes=base.outcomes),
             "contaminated": contaminated(events) or contaminated_transcripts(run_dir / "transcripts"),
             "cost": {key: run.get(key) for key in ("usage_by_agent", "totals", "auto_replies")},
         }
