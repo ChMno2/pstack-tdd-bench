@@ -9,7 +9,7 @@ DIR   ?=
 VENV  := .venv/bin
 
 .DEFAULT_GOAL := help
-.PHONY: help install test lint check-task lock run runs download score image
+.PHONY: help install test lint check-task lock run runs download score rescore image
 
 help: ## List the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -41,6 +41,9 @@ download: ## Download a batch's run directories into results/<RUN> (RUN=<run-id>
 
 score: ## Re-score a downloaded run directory (DIR=<run dir>, TASK=tasks/<id>)
 	$(VENV)/bench score $(DIR) --task $(TASK)
+
+rescore: ## Re-score a batch on GitHub Actions with the current scoring code (RUN=<run-id>, TASK=tasks/<id>)
+	gh workflow run rescore.yml -R $(REPO) -f run_id=$(RUN) -f task=$(TASK)
 
 image: ## Rebuild and smoke-test the runner image on GitHub Actions
 	gh workflow run image.yml -R $(REPO)

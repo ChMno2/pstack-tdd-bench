@@ -1,0 +1,103 @@
+name: rescore
+
+# Re-score the run directories of an earlier `run` workflow with the scoring code in the current image.
+# The agent is not run again and no model credentials are involved.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: ID of the earlier `run` workflow run (the number in its URL)
+        required: true
+      task:
+        description: Task directory
+        required: true
+        default: tasks/T00-smoke
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      image: ${{ steps.r.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: r
+        run: |
+          image="$(head -n 1 image/IMAGE_DIGEST)"
+          case "$image" in
+            ghcr.io/*@sha256:*) ;;
+            *) echo "image/IMAGE_DIGEST does not hold a digest reference: $image"; exit 1 ;;
+          esac
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+  rescore:
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    container:
+      image: ${{ needs.resolve.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+        env:
+          POSTGRES_USER: lims
+          POSTGRES_PASSWORD: lims
+          POSTGRES_DB: lims
+        options: >-
+          --health-cmd "pg_isready -U lims" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine@sha256:7b1753b4c5ad8458906c272a8132b8c15f5557b000379eb115fb239706a384b7
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://lims:lims@postgres:5432/lims
+      TEST_DATABASE_URL: postgresql+asyncpg://lims:lims@postgres:5432/lims_test
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ci-test-secret-not-for-prod
+      ENV: ci
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          persist-credentials: false
+      - name: Download the run directories of that run
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: /bench-runs
+      - name: Score every run directory twice and require identical results
+        env:
+          TASK: ${{ inputs.task }}
+          RUN: ${{ inputs.run_id }}
+        run: |
+          found=0
+          for d in /bench-runs/*/*/; do
+            test -f "$d/run.json" || continue
+            found=1
+            bench score "$d" --task "$TASK" --sut-repo "$GITHUB_WORKSPACE/sut/lims"
+            cp "$d/score.json" /tmp/score-first.json
+            bench score "$d" --task "$TASK" --sut-repo "$GITHUB_WORKSPACE/sut/lims"
+            diff /tmp/score-first.json "$d/score.json"
+            echo "### $d" >> "$GITHUB_STEP_SUMMARY"
+            cat "$d/score.json" >> "$GITHUB_STEP_SUMMARY"
+          done
+          test "$found" = 1 || { echo "no run directory found in the artifacts of run $RUN"; exit 1; }
+      - name: Upload the new scores and scoring logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rescore-${{ inputs.run_id }}-${{ github.run_id }}
+          path: |
+            /bench-runs/*/*/score.json
+            /bench-runs/*/*/scoring/
+          retention-days: 90

@@ -42,12 +42,13 @@ GitHub Actions：run.yml（只能手動觸發，唯一拿得到模型憑證的 w
 artifact：run.json、score.json、軌跡、測試紀錄、Agent 的工作區（保留 90 天）
 ```
 
-使用情境有三種：
+使用情境有四種：
 
 | 情境 | 用途 | 入口 |
 | --- | --- | --- |
 | 跑實驗 | 試跑與正式執行 | [run.yml](.github/workflows/run.yml)、`make run` |
 | 映像建置與演練 | 建映像、跑 LIMS 冒煙測試、用假 Agent 跑完整流程 | [image.yml](.github/workflows/image.yml)、`make image` |
+| 重新評分 | 評分程式更新後，不重跑 Agent 直接重算一批執行的分數 | [rescore.yml](.github/workflows/rescore.yml)、`make rescore` |
 | 本機開發 | 修改 bench、跑單元測試、檢查任務 | [Makefile](Makefile) |
 
 ## Tech Stack
@@ -130,7 +131,15 @@ make check-task TASK=tasks/T00-smoke      # 檢查任務的 patch 是否套得�
 
 ### Mode C: 重現與重新評分
 
-下載的執行目錄可以在本機重新評分，得到的 `score.json` 應該與 artifact 裡的相同。評分會執行 LIMS 的測試，所以需要一個 PostgreSQL，並設定 `TEST_DATABASE_URL` 與 `DATABASE_URL`。
+評分程式更新後，不必重跑 Agent，就能用目前映像裡的評分程式在 GitHub Actions 上重新評分一批執行：
+
+```bash
+make rescore RUN=<run 工作流程的 run-id> TASK=tasks/T00-smoke
+```
+
+新的 `score.json` 與評分紀錄會上傳成 `rescore-<run-id>-<本次 id>` artifact。
+
+下載的執行目錄也可以在本機重新評分，得到的 `score.json` 應該與 artifact 裡的相同。評分會執行 LIMS 的測試，所以需要一個 PostgreSQL，並設定 `TEST_DATABASE_URL` 與 `DATABASE_URL`。
 
 ```bash
 make score DIR=results/<run-id>/<artifact>/<任務>-<條件>-r<重複> TASK=tasks/T00-smoke
@@ -181,11 +190,14 @@ make score DIR=results/<run-id>/<artifact>/<任務>-<條件>-r<重複> TASK=task
 | --- | --- |
 | `tests` | 新增、刪除、修改了哪些測試。新增為零就是**無測試執行** |
 | `red` | 新增的測試放回起始快照上，是否至少一個失敗 |
-| `green` | 新增的測試在參考實作上連跑 3 次，分成有效、失敗、不穩定 |
+| `green` | 新增的測試在參考實作上連跑 3 次，分成有效、失敗、不穩定。每個無效測試附上原因：`assertion`（預期值與參考實作不符）、`exception`（執行時拋出例外）、`setup`（fixture 失敗）、`skipped`、`not_run`（沒有結果，例如檔案無法匯入） |
 | `adherence` | 在 Agent 第一次修改正式程式碼之前，新測試是否已經失敗過 |
 | `coverage` | 有效測試對任務模組的行覆蓋率與分支覆蓋率 |
 | `mutation` | 有效測試對任務模組的變異分數 |
 | `planted` | 每個植入的 bug 是否被有效測試抓到 |
+| `existing_suite` | 起始快照裡既有的測試在參考實作上的覆蓋率與變異分數。只取決於任務，所有條件相同 |
+| `increment` | 有效測試在既有測試之上多覆蓋的行數與分支數、多殺死的變異體數，以及兩者合併後的變異分數 |
+| `regression` | 既有測試在參考實作上通過、在 Agent 改過的程式上失敗的清單。一律用起始快照裡的測試版本判定 |
 | `contaminated` | Agent 是否試圖取得公開的 LIMS 原始碼 |
 | `cost` | token 用量（依主 Agent 與各子 Agent 拆分）與自動回覆次數 |
 
@@ -203,6 +215,7 @@ make lint         # ruff
 | [ci.yml](.github/workflows/ci.yml) | 每次 push | ruff 與單元測試 |
 | [image.yml](.github/workflows/image.yml) | 映像相關檔案變更時、手動 | 建置映像、LIMS 後端測試、假 Agent 全流程演練 |
 | [run.yml](.github/workflows/run.yml) | 只能手動 | 跑實驗、評分兩次比對、掃描憑證、上傳結果 |
+| [rescore.yml](.github/workflows/rescore.yml) | 只能手動 | 下載一批執行的 artifact，用目前映像重新評分兩次比對，上傳新分數 |
 
 ## 目前狀態
 
