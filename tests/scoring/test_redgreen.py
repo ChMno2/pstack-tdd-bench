@@ -93,3 +93,64 @@ def test_tests_using_a_new_helper_module_score_normally(trees, mini_task, env, t
     ids = ["tests/test_helper.py::test_two_is_even"]
     assert red_check(snapshot, final, mini_task, ids, scoring_env(env)).outcomes == {ids[0]: "failed"}
     assert green_check(reference, final, mini_task, ids, scoring_env(env)).valid == ids
+
+
+REASONS_TEST = """import pytest
+from app.calc import is_even
+
+
+class Box:
+    pass
+
+
+def test_expects_odd():
+    assert is_even(4) is False
+
+
+def test_object_in_message():
+    assert Box() is None
+
+
+def test_raises_inside():
+    {}["missing"]
+
+
+@pytest.fixture
+def broken():
+    raise RuntimeError("fixture boom")
+
+
+def test_bad_fixture(broken):
+    assert is_even(2)
+"""
+
+
+def test_green_records_why_each_test_is_invalid(trees, mini_task, env, tmp_path: Path):
+    snapshot, final = trees
+    reference = build_reference(snapshot, mini_task, tmp_path / "reference")
+    write(final, "backend/tests/test_reasons.py", REASONS_TEST)
+    write(final, "backend/tests/test_noimport.py", "from app.nowhere import x\n\n\ndef test_x():\n    assert x\n")
+    ids = ["tests/test_reasons.py::test_expects_odd", "tests/test_reasons.py::test_object_in_message",
+           "tests/test_reasons.py::test_raises_inside", "tests/test_reasons.py::test_bad_fixture",
+           "tests/test_noimport.py::test_x"]
+    result = green_check(reference, final, mini_task, ids, scoring_env(env))
+    assert result.valid == []
+    reasons = result.reasons
+    assert set(reasons) == set(ids)
+    assert reasons["tests/test_reasons.py::test_expects_odd"]["category"] == "assertion"
+    assert reasons["tests/test_reasons.py::test_expects_odd"]["message"].startswith("assert True is False")
+    assert reasons["tests/test_reasons.py::test_raises_inside"] == {"category": "exception",
+                                                                    "message": "KeyError: 'missing'"}
+    assert reasons["tests/test_reasons.py::test_bad_fixture"] == {"category": "setup",
+                                                                  "message": "RuntimeError: fixture boom"}
+    assert reasons["tests/test_noimport.py::test_x"] == {"category": "not_run", "message": ""}
+    # memory addresses differ between runs; scoring twice must give identical score.json
+    assert "0x?" in reasons["tests/test_reasons.py::test_object_in_message"]["message"]
+
+
+def test_valid_tests_have_no_reason(trees, mini_task, env, tmp_path: Path):
+    snapshot, final = trees
+    reference = build_reference(snapshot, mini_task, tmp_path / "reference")
+    write(final, "backend/tests/test_new.py", FAIL_ON_SNAPSHOT)
+    result = green_check(reference, final, mini_task, ["tests/test_new.py::test_is_even_two"], scoring_env(env))
+    assert result.valid == ["tests/test_new.py::test_is_even_two"] and result.reasons == {}

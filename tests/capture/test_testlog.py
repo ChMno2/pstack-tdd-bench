@@ -77,3 +77,33 @@ def test_plugin_dir_holds_a_standalone_module():
     env = plugin_env()
     assert env["PYTEST_PLUGINS"] == "benchlog"
     assert (Path(env["PYTHONPATH"]) / "benchlog.py").is_file()
+
+
+def test_failures_record_exception_type_phase_and_message(pytester, log_path):
+    pytester.makepyfile(
+        test_f="import pytest\n\n"
+        "def test_assert():\n    assert 1 == 2\n\n"
+        "def test_raises():\n    raise KeyError('k')\n\n"
+        "def test_did_not_raise():\n    with pytest.raises(ValueError):\n        pass\n\n"
+        "@pytest.fixture\ndef boom():\n    raise RuntimeError('fixture boom')\n\n"
+        "def test_setup(boom):\n    pass\n\n"
+        "def test_ok():\n    assert True\n"
+    )
+    pytester.runpytest_subprocess()
+    (line,) = _lines(log_path)
+    failures = line["failures"]
+    assert set(failures) == {"test_f.py::test_assert", "test_f.py::test_raises", "test_f.py::test_did_not_raise",
+                             "test_f.py::test_setup"}
+    assert failures["test_f.py::test_assert"] == {"when": "call", "exc_type": "AssertionError",
+                                                   "message": "assert 1 == 2"}
+    assert failures["test_f.py::test_raises"]["exc_type"] == "KeyError"
+    assert failures["test_f.py::test_did_not_raise"]["exc_type"] == "Failed"
+    assert failures["test_f.py::test_setup"] == {"when": "setup", "exc_type": "RuntimeError",
+                                                  "message": "RuntimeError: fixture boom"}
+
+
+def test_failure_message_is_bounded(pytester, log_path):
+    pytester.makepyfile(test_long="def test_long():\n    assert 'x' * 5000 == 'y'\n")
+    pytester.runpytest_subprocess()
+    (line,) = _lines(log_path)
+    assert len(line["failures"]["test_long.py::test_long"]["message"]) <= 300
